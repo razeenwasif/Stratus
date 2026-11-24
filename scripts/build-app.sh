@@ -84,6 +84,7 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
       <key>CFBundleURLSchemes</key>
       <array>
         <string>com.stratus.gcp</string>
+        <string>stratus</string>
       </array>
     </dict>
   </array>

@@ -160,6 +160,18 @@ final class AppState {
         }
     }
 
+    func handleDeepLink(_ url: URL) async {
+        let parsed = DeepLinkParser.parse(url)
+        if let projectId = parsed.projectId,
+           let match = projects.first(where: { $0.projectId == projectId }) {
+            await selectProject(match)
+        }
+        if let section = parsed.section {
+            navigate(to: section)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func loadDataIfNeeded(for section: NavSection) async {
         switch section {
         case .overview:

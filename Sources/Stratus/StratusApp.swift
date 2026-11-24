@@ -9,7 +9,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-@main
 struct StratusApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var appState = AppState()
@@ -20,6 +19,9 @@ struct StratusApp: App {
                 .environment(appState)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 1020, minHeight: 680)
+                .onOpenURL { url in
+                    Task { await appState.handleDeepLink(url) }
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1360, height: 860)

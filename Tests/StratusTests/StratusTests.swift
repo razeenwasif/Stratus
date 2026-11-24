@@ -189,4 +189,33 @@ struct StratusTests {
         #expect(estimated.totalSpend > 0)
         #expect(!estimated.topResources.isEmpty)
     }
+
+    @Test("DeepLinkParser resolves section and project query parameters")
+    func deepLinkParsing() {
+        let url = URL(string: "stratus://navigate?section=compute&project=prod-platform-core")!
+        let parsed = DeepLinkParser.parse(url)
+        #expect(parsed.section == .compute)
+        #expect(parsed.projectId == "prod-platform-core")
+    }
+
+    @Test("MCPServer handles initialize, tools/list, and tools/call in demo mode")
+    @MainActor
+    func mcpServerProtocol() async throws {
+        let server = MCPServer()
+
+        let initReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#)
+        #expect(initReply?.contains("2024-11-05") == true)
+        #expect(initReply?.contains("stratus") == true)
+
+        let notifReply = await server.handleMessage(#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
+        #expect(notifReply == nil)
+
+        let listReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
+        #expect(listReply?.contains("stratus_list_vms") == true)
+        #expect(listReply?.contains("stratus_open_ui") == true)
+
+        let callReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"stratus_list_projects","arguments":{"demo":true}}}"#)
+        #expect(callReply?.contains("prod-platform-core") == true)
+        #expect(callReply?.contains(#""isError":false"#) == true)
+    }
 }

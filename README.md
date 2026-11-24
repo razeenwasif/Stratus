@@ -86,6 +86,40 @@ swift run
 
 ---
 
+## Agent Integration (`agy` & `fairy`)
+
+Stratus ships with a built-in **MCP stdio server** (`--mcp`), a **JSON CLI** (`stratus`), and **`stratus://` deep-link navigation** so Antigravity (`agy`) and Fairy (Claude Code, Codex, and Gemini) can inspect and operate Google Cloud resources on your behalf.
+
+### Install Agent Integrations
+
+After installing `~/Applications/Stratus.app`, run:
+
+```bash
+./scripts/install-agent-integrations.sh
+```
+
+This configures:
+- **CLI**: Symlinks `~/.local/bin/stratus` → `~/Applications/Stratus.app/Contents/MacOS/Stratus`
+- **MCP Server (`--mcp`)**: Registers `stratus` in Antigravity (`agy mcp add`), Claude Code/Fairy (`~/.claude.json`), and Codex/Fairy (`~/.codex/config.toml`)
+- **Agent Skill**: Installs `.agents/skills/stratus/SKILL.md` to `~/.gemini/config/skills/stratus/`, `~/.claude/skills/stratus/`, and `~/.codex/skills/stratus/`
+
+### Available MCP Tools & CLI Commands
+
+| MCP Tool | CLI Equivalent | Purpose |
+| :--- | :--- | :--- |
+| `stratus_status` | `stratus status` | Auth mode, active email, default project |
+| `stratus_list_projects` | `stratus projects` | List accessible GCP projects |
+| `stratus_overview` | `stratus overview` | Cost & resource summary |
+| `stratus_list_vms` / `stratus_vm_action` | `stratus vm list\|start\|stop\|reset` | Inspect & control Compute VMs |
+| `stratus_list_cloud_run` | `stratus run list` | List Cloud Run services & URLs |
+| `stratus_list_buckets` / `stratus_list_objects` / `stratus_read_object` | `stratus storage buckets\|ls\|cat` | Browse & read GCS objects |
+| `stratus_query_logs` | `stratus logs --filter "..."` | Query Cloud Logging |
+| `stratus_list_iam` / `stratus_list_apis` / `stratus_toggle_api` | `stratus iam` / `stratus apis ...` | Inspect IAM & toggle GCP APIs |
+| `stratus_bigquery` / `stratus_cloud_sql` / `stratus_secrets` | `stratus bq\|sql\|secrets ...` | Query BigQuery, Cloud SQL & Secret Manager |
+| `stratus_open_ui` | `stratus open [section]` | Focus the Stratus macOS app via `stratus://` |
+
+---
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
