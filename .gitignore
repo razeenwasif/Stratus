@@ -1,0 +1,46 @@
+# Swift Package Manager & Xcode
+.build/
+build/
+.swiftpm/
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# macOS system files
+.DS_Store
+._*
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+*~
+
+# Secrets, tokens & Google Cloud credentials (NEVER commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.pfx
+*.key
+*.keystore
+*.token
+.secrets/
+credentials.json
+*credentials*.json
+*service-account*.json
+*service_account*.json
+*client_secret*.json
+application_default_credentials.json
+gcloud-key*.json
+oauth*.json
+
+# Temporary icon generation artifacts
+Assets/*.iconset/
