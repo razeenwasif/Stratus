@@ -315,51 +315,7 @@ struct DataServicesView: View {
     // MARK: - Firestore, Spanner, Memorystore Redis, Pub/Sub
 
     private var firestoreView: some View {
-        Group {
-            if appState.isLoadingFirestore && appState.firestoreDatabases.isEmpty {
-                ProgressView("Loading Firestore databases...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let err = appState.firestoreError, appState.firestoreDatabases.isEmpty {
-                EmptyStateView(icon: "flame", title: "Firestore unavailable", message: err, actionTitle: "Retry") {
-                    Task { await appState.refreshFirestore() }
-                }
-            } else if appState.firestoreDatabases.isEmpty {
-                EmptyStateView(icon: "flame", title: "No Firestore databases", message: "No Firestore databases configured in this project.")
-            } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 14) {
-                        ForEach(appState.firestoreDatabases) { db in
-                            VStack(alignment: .leading, spacing: 10) {
-                                HStack(spacing: 10) {
-                                    Image(systemName: "flame.fill")
-                                        .font(.system(size: 13))
-                                        .foregroundStyle(T3.amber)
-                                    Text(db.name)
-                                        .font(T3.mono(14, weight: .semibold))
-                                        .foregroundStyle(T3.textPrimary)
-                                    TagPill(text: db.location, monospaced: true)
-                                    TagPill(text: db.type, monospaced: true)
-                                    TagPill(text: db.concurrencyMode, monospaced: true)
-                                }
-
-                                if !db.collections.isEmpty {
-                                    FlowWrapLayout(horizontalSpacing: 8, verticalSpacing: 8) {
-                                        ForEach(db.collections, id: \.self) { col in
-                                            TagPill(text: col, color: T3.mint, textColor: T3.textPrimary, monospaced: true)
-                                        }
-                                    }
-                                    .padding(.leading, 22)
-                                }
-                            }
-                            .padding(14)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        }
-                    }
-                    .padding(.bottom, 32)
-                }
-            }
-        }
+        FirestoreExplorerView()
     }
 
     private var spannerView: some View {

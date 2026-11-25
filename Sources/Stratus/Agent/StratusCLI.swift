@@ -151,6 +151,10 @@ enum StratusCLI {
                 let hours = extractOption("--hours", from: &mArgs).flatMap(Int.init) ?? 24
                 let kind = mArgs.first ?? "computeCPU"
                 output = try await bridge.monitoring(projectId: projectId, metricRaw: kind, hours: hours, demo: demo)
+            case "firebase":
+                output = try await runFirebaseCLI(rest: rest, projectId: projectId, bridge: bridge, demo: demo)
+            case "firestore":
+                output = try await runFirestoreCLI(rest: rest, projectId: projectId, bridge: bridge, demo: demo)
             case "open":
                 let section = rest.first
                 output = try await bridge.openUI(section: section, projectId: projectId)
@@ -217,7 +221,17 @@ enum StratusCLI {
           secrets list                    List Secret Manager secrets
           secrets versions <name>         List versions for a secret
           secrets reveal <name> [ver]     Reveal secret payload
-          open [section]                  Open Stratus UI (overview|compute|cloudRun|storage|dataServices|logging|iamAndApis)
+          firebase project|apps|app-config <appId>
+          firebase auth list|create|disable|enable|delete ...
+          firebase hosting sites|releases|channels [siteId]
+          firebase rules list|get [rulesetName]
+          firebase remote-config get|versions|publish <json>
+          firebase rtdb instances|get|set|delete [path] [json]
+          firestore databases|collections|indexes [parentDocPath]
+          firestore list <col> | get <doc> | delete <doc>
+          firestore create <col> <json> [--id <docId>] | update <doc> <json>
+          firestore query <col> [--field F] [--op OP] [--value V] [--limit N]
+          open [section]                  Open Stratus UI (overview|compute|cloudRun|storage|dataServices|firebase|logging|iamAndApis)
 
         Global Options:
           -p, --project <id>              Target GCP project ID
@@ -226,5 +240,156 @@ enum StratusCLI {
           -v, --version                   Print version
           -h, --help                      Show this help
         """)
+    }
+
+    private static func runFirebaseCLI(
+        rest: [String],
+        projectId: String?,
+        bridge: AgentBridge,
+        demo: Bool
+    ) async throws -> AnyCodableValue {
+        let sub = rest.first ?? "apps"
+        let tail = Array(rest.dropFirst())
+        switch sub {
+        case "project":
+            return try await bridge.firebase(projectId: projectId, action: "project", demo: demo)
+        case "apps":
+            return try await bridge.firebase(projectId: projectId, action: "apps", demo: demo)
+        case "app-config":
+            guard let appId = tail.first else { throw AgentBridgeError.missingArgument("firebase app-config <appId>") }
+            return try await bridge.firebase(projectId: projectId, action: "app_config", appId: appId, demo: demo)
+        case "auth":
+            let op = tail.first ?? "list"
+            switch op {
+            case "list":
+                return try await bridge.firebase(projectId: projectId, action: "auth_list", demo: demo)
+            case "create":
+                guard tail.count >= 3 else { throw AgentBridgeError.missingArgument("firebase auth create <email> <password> [displayName]") }
+                let display = tail.count >= 4 ? tail[3] : nil
+                return try await bridge.firebase(projectId: projectId, action: "auth_create", email: tail[1], password: tail[2], displayName: display, demo: demo)
+            case "disable":
+                guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firebase auth disable <localId>") }
+                return try await bridge.firebase(projectId: projectId, action: "auth_disable", localId: tail[1], demo: demo)
+            case "enable":
+                guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firebase auth enable <localId>") }
+                return try await bridge.firebase(projectId: projectId, action: "auth_enable", localId: tail[1], demo: demo)
+            case "delete":
+                guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firebase auth delete <localId>") }
+                return try await bridge.firebase(projectId: projectId, action: "auth_delete", localId: tail[1], demo: demo)
+            default:
+                throw AgentBridgeError.invalidArgument("Unknown firebase auth subcommand: \(op)")
+            }
+        case "hosting":
+            let op = tail.first ?? "sites"
+            let siteId = tail.count >= 2 ? tail[1] : nil
+            switch op {
+            case "sites": return try await bridge.firebase(projectId: projectId, action: "hosting_sites", demo: demo)
+            case "releases": return try await bridge.firebase(projectId: projectId, action: "hosting_releases", siteId: siteId, demo: demo)
+            case "channels": return try await bridge.firebase(projectId: projectId, action: "hosting_channels", siteId: siteId, demo: demo)
+            default: throw AgentBridgeError.invalidArgument("Unknown firebase hosting subcommand: \(op)")
+            }
+        case "rules":
+            let op = tail.first ?? "list"
+            if op == "list" {
+                return try await bridge.firebase(projectId: projectId, action: "rules_list", demo: demo)
+            } else if op == "get" {
+                return try await bridge.firebase(projectId: projectId, action: "rules_get", rulesetName: tail.count >= 2 ? tail[1] : nil, demo: demo)
+            } else {
+                throw AgentBridgeError.invalidArgument("Unknown firebase rules subcommand: \(op)")
+            }
+        case "remote-config":
+            let op = tail.first ?? "get"
+            switch op {
+            case "get": return try await bridge.firebase(projectId: projectId, action: "remote_config_get", demo: demo)
+            case "versions": return try await bridge.firebase(projectId: projectId, action: "remote_config_versions", demo: demo)
+            case "publish":
+                guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firebase remote-config publish '<json>'") }
+                return try await bridge.firebase(projectId: projectId, action: "remote_config_publish", rawJSON: tail[1], demo: demo)
+            default: throw AgentBridgeError.invalidArgument("Unknown remote-config subcommand: \(op)")
+            }
+        case "rtdb":
+            var rtdbArgs = tail
+            let shallow = extractFlag("--shallow", from: &rtdbArgs)
+            let dbUrl = extractOption("--url", from: &rtdbArgs)
+            let op = rtdbArgs.first ?? "instances"
+            switch op {
+            case "instances":
+                return try await bridge.firebase(projectId: projectId, action: "rtdb_instances", demo: demo)
+            case "get":
+                let p = rtdbArgs.count >= 2 ? rtdbArgs[1] : "/"
+                return try await bridge.firebase(projectId: projectId, action: "rtdb_get", databaseUrl: dbUrl, path: p, shallow: shallow, demo: demo)
+            case "set":
+                guard rtdbArgs.count >= 3 else { throw AgentBridgeError.missingArgument("firebase rtdb set <path> '<json>'") }
+                return try await bridge.firebase(projectId: projectId, action: "rtdb_set", rawJSON: rtdbArgs[2], databaseUrl: dbUrl, path: rtdbArgs[1], demo: demo)
+            case "delete":
+                guard rtdbArgs.count >= 2 else { throw AgentBridgeError.missingArgument("firebase rtdb delete <path>") }
+                return try await bridge.firebase(projectId: projectId, action: "rtdb_delete", databaseUrl: dbUrl, path: rtdbArgs[1], demo: demo)
+            default:
+                throw AgentBridgeError.invalidArgument("Unknown rtdb subcommand: \(op)")
+            }
+        default:
+            throw AgentBridgeError.invalidArgument("Unknown firebase subcommand: \(sub)")
+        }
+    }
+
+    private static func runFirestoreCLI(
+        rest: [String],
+        projectId: String?,
+        bridge: AgentBridge,
+        demo: Bool
+    ) async throws -> AnyCodableValue {
+        var args = rest
+        let dbId = extractOption("--db", from: &args) ?? "(default)"
+        let sub = args.first ?? "databases"
+        var tail = Array(args.dropFirst())
+
+        switch sub {
+        case "databases":
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "databases", demo: demo)
+        case "collections":
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "collections", documentPath: tail.first, demo: demo)
+        case "list":
+            guard let col = tail.first else { throw AgentBridgeError.missingArgument("firestore list <collectionPath>") }
+            let limit = extractOption("--limit", from: &tail).flatMap(Int.init) ?? 50
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "list", collectionPath: col, limit: limit, demo: demo)
+        case "get":
+            guard let doc = tail.first else { throw AgentBridgeError.missingArgument("firestore get <documentPath>") }
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "get", documentPath: doc, demo: demo)
+        case "create":
+            let docId = extractOption("--id", from: &tail)
+            guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firestore create <collectionPath> '<fieldsJSON>' [--id <docId>]") }
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "create", collectionPath: tail[0], documentId: docId, fieldsJSON: tail[1], demo: demo)
+        case "update":
+            guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firestore update <documentPath> '<fieldsJSON>'") }
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "update", documentPath: tail[0], fieldsJSON: tail[1], demo: demo)
+        case "delete":
+            guard let doc = tail.first else { throw AgentBridgeError.missingArgument("firestore delete <documentPath>") }
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "delete", documentPath: doc, demo: demo)
+        case "query":
+            let field = extractOption("--field", from: &tail)
+            let op = extractOption("--op", from: &tail)
+            let value = extractOption("--value", from: &tail)
+            let orderBy = extractOption("--order-by", from: &tail)
+            let desc = extractFlag("--desc", from: &tail)
+            let limit = extractOption("--limit", from: &tail).flatMap(Int.init) ?? 50
+            guard let col = tail.first else { throw AgentBridgeError.missingArgument("firestore query <collectionPath>") }
+            return try await bridge.firestore(
+                projectId: projectId,
+                databaseId: dbId,
+                action: "query",
+                collectionPath: col,
+                filterField: field,
+                filterOp: op,
+                filterValue: value,
+                orderBy: orderBy,
+                descending: desc,
+                limit: limit,
+                demo: demo
+            )
+        case "indexes":
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "indexes", demo: demo)
+        default:
+            throw AgentBridgeError.invalidArgument("Unknown firestore subcommand: \(sub)")
+        }
     }
 }

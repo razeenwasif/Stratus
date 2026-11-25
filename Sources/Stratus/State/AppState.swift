@@ -16,6 +16,7 @@ final class AppState {
     var selectedServerlessTab: ServerlessSubTab = .cloudRun
     var selectedNetworkCITab: NetworkCISubTab = .vpc
     var selectedDataTab: DataSubTab = .bigQuery
+    var selectedFirebaseTab: FirebaseSubTab = .apps
     var selectedSecurityTab: SecuritySubTab = .iam
     var sidebarCollapsed = false
     var showCommandPalette = false
@@ -132,8 +133,59 @@ final class AppState {
     var pubSubError: String?
 
     var firestoreDatabases: [FirestoreDatabase] = []
+    var selectedFirestoreDatabaseId: String = "(default)"
+    var firestoreParentDocumentPath: String = ""
+    var firestoreCollections: [String] = []
+    var selectedFirestoreCollectionPath: String = ""
+    var firestoreDocuments: [FirestoreDocument] = []
+    var selectedFirestoreDocument: FirestoreDocument?
+    var firestoreDocSubcollections: [String] = []
+    var firestoreIndexes: [FirestoreIndex] = []
+    var isLoadingFirestoreDocs = false
+    var isMutatingFirestore = false
+    var firestoreQueryActive = false
     var isLoadingFirestore = false
     var firestoreError: String?
+
+    // Firebase (Management, Auth, Hosting, Rules, Remote Config, RTDB)
+    var firebaseProjectInfo: FirebaseProjectInfo?
+    var firebaseApps: [FirebaseAppItem] = []
+    var selectedFirebaseAppConfig: FirebaseAppConfig?
+    var isLoadingFirebaseApps = false
+    var firebaseAppsError: String?
+
+    var firebaseAuthUsers: [FirebaseAuthUser] = []
+    var isLoadingFirebaseAuth = false
+    var busyFirebaseAuthUIDs: Set<String> = []
+    var firebaseAuthError: String?
+
+    var firebaseHostingSites: [FirebaseHostingSite] = []
+    var selectedHostingSite: FirebaseHostingSite?
+    var firebaseHostingReleases: [FirebaseHostingRelease] = []
+    var firebaseHostingChannels: [FirebaseHostingChannel] = []
+    var isLoadingFirebaseHosting = false
+    var firebaseHostingError: String?
+
+    var firebaseRulesReleases: [FirebaseRulesRelease] = []
+    var selectedRulesRelease: FirebaseRulesRelease?
+    var activeFirebaseRuleset: FirebaseRuleset?
+    var isLoadingFirebaseRules = false
+    var firebaseRulesError: String?
+
+    var firebaseRemoteConfig: FirebaseRemoteConfigTemplate?
+    var firebaseRemoteConfigVersions: [FirebaseRemoteConfigVersion] = []
+    var isLoadingFirebaseRemoteConfig = false
+    var isPublishingRemoteConfig = false
+    var firebaseRemoteConfigError: String?
+
+    var realtimeDBInstances: [RealtimeDBInstance] = []
+    var selectedRealtimeDB: RealtimeDBInstance?
+    var realtimeDBPath: String = "/"
+    var realtimeDBShallow = false
+    var realtimeDBPayload: String = ""
+    var isLoadingRealtimeDB = false
+    var isMutatingRealtimeDB = false
+    var realtimeDBError: String?
 
     var spannerInstances: [SpannerInstance] = []
     var isLoadingSpanner = false
@@ -223,6 +275,32 @@ final class AppState {
         pubSubTopics = []
         pubSubSubscriptions = []
         firestoreDatabases = []
+        selectedFirestoreDatabaseId = "(default)"
+        firestoreParentDocumentPath = ""
+        firestoreCollections = []
+        selectedFirestoreCollectionPath = ""
+        firestoreDocuments = []
+        selectedFirestoreDocument = nil
+        firestoreDocSubcollections = []
+        firestoreIndexes = []
+        firestoreQueryActive = false
+        firebaseProjectInfo = nil
+        firebaseApps = []
+        selectedFirebaseAppConfig = nil
+        firebaseAuthUsers = []
+        firebaseHostingSites = []
+        selectedHostingSite = nil
+        firebaseHostingReleases = []
+        firebaseHostingChannels = []
+        firebaseRulesReleases = []
+        selectedRulesRelease = nil
+        activeFirebaseRuleset = nil
+        firebaseRemoteConfig = nil
+        firebaseRemoteConfigVersions = []
+        realtimeDBInstances = []
+        selectedRealtimeDB = nil
+        realtimeDBPath = "/"
+        realtimeDBPayload = ""
         spannerInstances = []
         redisInstances = []
         monitoringPoints = []
@@ -262,6 +340,8 @@ final class AppState {
             if buckets.isEmpty { await refreshBuckets() }
         case .dataServices:
             await refreshDataServices()
+        case .firebase:
+            await refreshFirebaseSection()
         case .monitoring:
             if monitoringPoints.isEmpty { await refreshMonitoring() }
         case .logging:
@@ -279,6 +359,7 @@ final class AppState {
         case .networkAndCI: await refreshNetworkCISection()
         case .storage: await refreshBuckets()
         case .dataServices: await refreshDataServices()
+        case .firebase: await refreshFirebaseSection()
         case .monitoring: await refreshMonitoring()
         case .logging: await refreshLogs(filter: "")
         case .iamAndApis: await refreshSecuritySection()

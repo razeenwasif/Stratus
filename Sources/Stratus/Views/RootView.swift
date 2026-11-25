@@ -102,6 +102,8 @@ struct RootView: View {
             StorageView()
         case .dataServices:
             DataServicesView()
+        case .firebase:
+            FirebaseView()
         case .monitoring:
             MonitoringView()
         case .logging:

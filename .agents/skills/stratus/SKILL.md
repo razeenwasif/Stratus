@@ -11,7 +11,7 @@ Use **Stratus** whenever the user asks you to inspect, troubleshoot, query, or o
 
 ## Preferred Channels
 
-1. **MCP Tools (`stratus` server)**: Prefer the `stratus_*` MCP tools when available (`stratus_status`, `stratus_list_projects`, `stratus_overview`, `stratus_list_vms`, `stratus_vm_action`, `stratus_list_gke`, `stratus_list_cloud_run`, `stratus_list_functions`, `stratus_list_network`, `stratus_list_artifacts`, `stratus_builds`, `stratus_scheduler`, `stratus_list_buckets`, `stratus_list_objects`, `stratus_read_object`, `stratus_pubsub`, `stratus_databases`, `stratus_monitoring`, `stratus_query_logs`, `stratus_list_iam`, `stratus_list_apis`, `stratus_toggle_api`, `stratus_bigquery`, `stratus_cloud_sql`, `stratus_secrets`, `stratus_open_ui`).
+1. **MCP Tools (`stratus` server)**: Prefer the `stratus_*` MCP tools when available (`stratus_status`, `stratus_list_projects`, `stratus_overview`, `stratus_list_vms`, `stratus_vm_action`, `stratus_list_gke`, `stratus_list_cloud_run`, `stratus_list_functions`, `stratus_list_network`, `stratus_list_artifacts`, `stratus_builds`, `stratus_scheduler`, `stratus_list_buckets`, `stratus_list_objects`, `stratus_read_object`, `stratus_pubsub`, `stratus_databases`, `stratus_firebase`, `stratus_firestore`, `stratus_monitoring`, `stratus_query_logs`, `stratus_list_iam`, `stratus_list_apis`, `stratus_toggle_api`, `stratus_bigquery`, `stratus_cloud_sql`, `stratus_secrets`, `stratus_open_ui`).
 2. **CLI Fallback (`stratus`)**: When running from a shell (or inside Fairy / Claude / Codex without MCP loaded), use `~/.local/bin/stratus`, which outputs clean JSON:
 
 ```sh
@@ -28,6 +28,8 @@ stratus builds -p <project-id>
 stratus scheduler -p <project-id>
 stratus pubsub -p <project-id>
 stratus db firestore|spanner|redis -p <project-id>
+stratus firebase project|apps|auth|hosting|rules|remote-config|rtdb -p <project-id>
+stratus firestore databases|collections|list|get|create|update|delete|query|indexes -p <project-id>
 stratus metrics computeCPU|cloudRunRequests|sqlCPU|sqlMemory -p <project-id>
 stratus storage buckets -p <project-id>
 stratus logs --filter "severity>=ERROR" --limit 50 -p <project-id>

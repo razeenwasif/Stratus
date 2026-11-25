@@ -151,6 +151,7 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
     case networkAndCI
     case storage
     case dataServices
+    case firebase
     case monitoring
     case logging
     case iamAndApis
@@ -165,6 +166,7 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         case .networkAndCI: return "Network & CI"
         case .storage: return "Cloud Storage"
         case .dataServices: return "Data & Messaging"
+        case .firebase: return "Firebase"
         case .monitoring: return "Monitoring"
         case .logging: return "Cloud Logging"
         case .iamAndApis: return "Security & IAM"
@@ -179,6 +181,7 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         case .networkAndCI: return "Network & CI"
         case .storage: return "Storage"
         case .dataServices: return "Data & Pub/Sub"
+        case .firebase: return "Firebase"
         case .monitoring: return "Monitoring"
         case .logging: return "Logs"
         case .iamAndApis: return "Security & IAM"
@@ -193,6 +196,7 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         case .networkAndCI: return "network"
         case .storage: return "externaldrive"
         case .dataServices: return "cylinder.split.1x2"
+        case .firebase: return "flame.fill"
         case .monitoring: return "waveform.path.ecg"
         case .logging: return "text.alignleft"
         case .iamAndApis: return "lock.shield"
@@ -207,6 +211,7 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         case .networkAndCI: return "#4BC3F7"
         case .storage: return "#4BC3F7"
         case .dataServices: return "#34D399"
+        case .firebase: return "#FBBF24"
         case .monitoring: return "#E88255"
         case .logging: return "#FBBF24"
         case .iamAndApis: return "#A78BFA"
@@ -221,6 +226,7 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         case .networkAndCI: return "4"
         case .storage: return "5"
         case .dataServices: return "6"
+        case .firebase: return "0"
         case .monitoring: return "7"
         case .logging: return "8"
         case .iamAndApis: return "9"
@@ -238,7 +244,7 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .overview, .monitoring, .logging: return .monitor
         case .compute, .serverless, .networkAndCI: return .infrastructure
-        case .storage, .dataServices: return .data
+        case .storage, .dataServices, .firebase: return .data
         case .iamAndApis: return .security
         }
     }

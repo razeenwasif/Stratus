@@ -336,8 +336,28 @@ actor GCPAPIClient {
         method: String = "GET",
         body: Data? = nil,
         contentType: String = "application/json",
+        extraHeaders: [String: String] = [:],
         token: String
     ) async throws -> Data {
+        let (data, _) = try await rawRequestWithHeaders(
+            urlString: urlString,
+            method: method,
+            body: body,
+            contentType: contentType,
+            extraHeaders: extraHeaders,
+            token: token
+        )
+        return data
+    }
+
+    func rawRequestWithHeaders(
+        urlString: String,
+        method: String = "GET",
+        body: Data? = nil,
+        contentType: String = "application/json",
+        extraHeaders: [String: String] = [:],
+        token: String
+    ) async throws -> (Data, HTTPURLResponse) {
         guard let url = URL(string: urlString) else {
             throw GCPAPIError.invalidURL(urlString)
         }
@@ -345,6 +365,9 @@ actor GCPAPIClient {
         request.httpMethod = method
         request.timeoutInterval = 25
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        for (header, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: header)
+        }
         if let body {
             request.httpBody = body
             request.setValue(contentType, forHTTPHeaderField: "Content-Type")
@@ -382,7 +405,7 @@ actor GCPAPIClient {
             throw GCPAPIError.httpError(code: http.statusCode, status: nil, message: raw)
         }
 
-        return data
+        return (data, http)
     }
 
     // MARK: - Projects & Billing

@@ -114,6 +114,35 @@ struct CommandPaletteView: View {
             })
         }
 
+        // Firebase & Firestore quick jumps
+        for tab in FirebaseSubTab.allCases {
+            list.append(PaletteEntry(
+                id: "fb-\(tab.rawValue)",
+                icon: "flame.fill",
+                tint: T3.amber,
+                title: "Firebase · \(tab.title)",
+                subtitle: "Open Firebase \(tab.title)",
+                badge: "Firebase"
+            ) {
+                appState.selectedFirebaseTab = tab
+                appState.navigate(to: .firebase)
+                appState.showCommandPalette = false
+            })
+        }
+
+        list.append(PaletteEntry(
+            id: "fs-explorer",
+            icon: "doc.text.magnifyingglass",
+            tint: T3.mint,
+            title: "Firestore Explorer",
+            subtitle: "Browse collections, subcollections, documents & run queries",
+            badge: "Firestore"
+        ) {
+            appState.selectedDataTab = .firestore
+            appState.navigate(to: .dataServices)
+            appState.showCommandPalette = false
+        })
+
         // Actions
         list.append(PaletteEntry(
             id: "act-agent",

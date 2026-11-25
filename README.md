@@ -38,7 +38,8 @@ Google Cloud's web console is dense, nested, and slow to navigate. **Stratus** s
 | **Serverless** | **Cloud Run** services, traffic split bars & revision history + **Cloud Functions v2** runtimes, triggers & endpoints. |
 | **Network & CI** | **VPC & Firewall Rules** (ALLOW/DENY, protocols/ports, source ranges), **Artifact Registry** repos & Docker image pull commands, **Cloud Build** history & **Cloud Scheduler** jobs (**Run Now**). |
 | **Cloud Storage** | Borderless bucket & folder browser with breadcrumbs, inline text/JSON/YAML preview, **Upload**, **Download**, and **Delete**. |
-| **Data & Messaging** | **BigQuery** SQL workspace, **Cloud SQL** instances & restart, **Firestore** databases & root collections, **Cloud Spanner**, **Memorystore (Redis)**, and **Pub/Sub** topics/subscriptions with inline **Publish**. |
+| **Data & Messaging** | **BigQuery** SQL workspace, **Cloud SQL** instances & restart, **Firestore** 3-column explorer (collections, subcollections, CRUD, structured queries, composite indexes), **Cloud Spanner**, **Memorystore (Redis)**, and **Pub/Sub** topics/subscriptions with inline **Publish**. |
+| **Firebase (`⌘0`)** | **Firebase** Project & Web/iOS/Android SDK configs, **Authentication** (list/search/create/disable/delete users), **Hosting** sites/releases/channels, **Security Rules**, **Remote Config** editor & versions, and **Realtime Database** JSON browser/editor. |
 | **Monitoring** | Live **Cloud Monitoring** CPU, Memory, and Cloud Run request rate time-series spline charts (`1h`, `6h`, `24h`). |
 | **Cloud Logging** | Monospace log stream with severity pills (`ERR`, `WRN`, `INF`, `DBG`) and expandable `jsonPayload` inspection. |
 | **Security & IAM** | **IAM Principals**, **Enabled APIs** (enable/disable), and **Secret Manager** version inspection with masked-by-default payload reveal. |

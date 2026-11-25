@@ -188,6 +188,41 @@ final class MCPServer {
                 payload = try await bridge.databases(projectId: projectId, kind: stringArg("kind", in: args) ?? "all", demo: demo)
             case "stratus_monitoring":
                 payload = try await bridge.monitoring(projectId: projectId, metricRaw: stringArg("metric", in: args) ?? "computeCPU", hours: intArg("hours", in: args) ?? 24, demo: demo)
+            case "stratus_firebase":
+                payload = try await bridge.firebase(
+                    projectId: projectId,
+                    action: try reqString("action", in: args),
+                    appId: stringArg("appId", in: args),
+                    email: stringArg("email", in: args),
+                    password: stringArg("password", in: args),
+                    displayName: stringArg("displayName", in: args),
+                    localId: stringArg("localId", in: args),
+                    siteId: stringArg("siteId", in: args),
+                    rulesetName: stringArg("rulesetName", in: args),
+                    rawJSON: stringArg("rawJSON", in: args),
+                    etag: stringArg("etag", in: args),
+                    databaseUrl: stringArg("databaseUrl", in: args),
+                    path: stringArg("path", in: args),
+                    shallow: boolArg("shallow", in: args) ?? false,
+                    demo: demo
+                )
+            case "stratus_firestore":
+                payload = try await bridge.firestore(
+                    projectId: projectId,
+                    databaseId: stringArg("databaseId", in: args) ?? "(default)",
+                    action: try reqString("action", in: args),
+                    collectionPath: stringArg("collectionPath", in: args),
+                    documentPath: stringArg("documentPath", in: args),
+                    documentId: stringArg("documentId", in: args),
+                    fieldsJSON: stringArg("fieldsJSON", in: args),
+                    filterField: stringArg("filterField", in: args),
+                    filterOp: stringArg("filterOp", in: args),
+                    filterValue: stringArg("filterValue", in: args),
+                    orderBy: stringArg("orderBy", in: args),
+                    descending: boolArg("descending", in: args) ?? false,
+                    limit: intArg("limit", in: args) ?? 50,
+                    demo: demo
+                )
             case "stratus_open_ui":
                 payload = try await bridge.openUI(
                     section: stringArg("section", in: args),
@@ -426,10 +461,64 @@ final class MCPServer {
             ]
         ),
         schema(
+            "stratus_firebase",
+            description: "Inspect and manage Firebase resources via REST APIs: project info, Web/iOS/Android apps & SDK configs, Auth users (list/create/disable/enable/delete), Hosting sites/releases/channels, Security Rules, Remote Config (get/publish/versions), and Realtime Database (instances/read/set/delete).",
+            properties: [
+                "projectId": projectIdProp,
+                "action": .object([
+                    "type": .string("string"),
+                    "enum": .array([
+                        "project", "apps", "app_config",
+                        "auth_list", "auth_create", "auth_disable", "auth_enable", "auth_delete",
+                        "hosting_sites", "hosting_releases", "hosting_channels",
+                        "rules_list", "rules_get",
+                        "remote_config_get", "remote_config_publish", "remote_config_versions",
+                        "rtdb_instances", "rtdb_get", "rtdb_set", "rtdb_delete"
+                    ].map(AnyCodableValue.string))
+                ]),
+                "appId": .object(["type": .string("string"), "description": .string("Firebase appId for app_config")]),
+                "email": .object(["type": .string("string"), "description": .string("Email for auth_create")]),
+                "password": .object(["type": .string("string"), "description": .string("Password (>=6 chars) for auth_create")]),
+                "displayName": .object(["type": .string("string"), "description": .string("Optional displayName for auth_create")]),
+                "localId": .object(["type": .string("string"), "description": .string("User UID for auth_disable, auth_enable, or auth_delete")]),
+                "siteId": .object(["type": .string("string"), "description": .string("Hosting siteId (defaults to projectId)")]),
+                "rulesetName": .object(["type": .string("string"), "description": .string("Full ruleset resource name for rules_get")]),
+                "rawJSON": .object(["type": .string("string"), "description": .string("JSON payload for remote_config_publish or rtdb_set")]),
+                "etag": .object(["type": .string("string"), "description": .string("Optional ETag for remote_config_publish")]),
+                "databaseUrl": .object(["type": .string("string"), "description": .string("Optional RTDB URL (defaults to first project instance)")]),
+                "path": .object(["type": .string("string"), "description": .string("RTDB path (e.g. /presence)")]),
+                "shallow": .object(["type": .string("boolean"), "description": .string("Shallow read for rtdb_get")])
+            ],
+            required: ["action"]
+        ),
+        schema(
+            "stratus_firestore",
+            description: "Full Firestore REST API browser, CRUD, structured queries, and composite index inspector.",
+            properties: [
+                "projectId": projectIdProp,
+                "databaseId": .object(["type": .string("string"), "description": .string("Firestore database ID (defaults to '(default)')")]),
+                "action": .object([
+                    "type": .string("string"),
+                    "enum": .array(["databases", "collections", "list", "get", "create", "update", "delete", "query", "indexes"].map(AnyCodableValue.string))
+                ]),
+                "collectionPath": .object(["type": .string("string"), "description": .string("Collection or subcollection path (e.g. users or users/usr_1/orders)")]),
+                "documentPath": .object(["type": .string("string"), "description": .string("Document path (e.g. users/usr_1)")]),
+                "documentId": .object(["type": .string("string"), "description": .string("Optional document ID when creating")]),
+                "fieldsJSON": .object(["type": .string("string"), "description": .string("Plain JSON object of fields for create/update")]),
+                "filterField": .object(["type": .string("string"), "description": .string("Field path for structured query")]),
+                "filterOp": .object(["type": .string("string"), "enum": .array(["EQUAL", "NOT_EQUAL", "LESS_THAN", "LESS_THAN_OR_EQUAL", "GREATER_THAN", "GREATER_THAN_OR_EQUAL", "ARRAY_CONTAINS"].map(AnyCodableValue.string))]),
+                "filterValue": .object(["type": .string("string"), "description": .string("Filter value for structured query")]),
+                "orderBy": .object(["type": .string("string"), "description": .string("Optional orderBy field path")]),
+                "descending": .object(["type": .string("boolean")]),
+                "limit": .object(["type": .string("integer")])
+            ],
+            required: ["action"]
+        ),
+        schema(
             "stratus_open_ui",
             description: "Open or focus the Stratus macOS app window to a specific project and section.",
             properties: [
-                "section": .object(["type": .string("string"), "enum": .array(["overview", "compute", "serverless", "networkAndCI", "storage", "dataServices", "monitoring", "logging", "iamAndApis"].map(AnyCodableValue.string))]),
+                "section": .object(["type": .string("string"), "enum": .array(["overview", "compute", "serverless", "networkAndCI", "storage", "dataServices", "firebase", "monitoring", "logging", "iamAndApis"].map(AnyCodableValue.string))]),
                 "projectId": projectIdProp
             ]
         )

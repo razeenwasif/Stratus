@@ -226,11 +226,23 @@ extension AppState {
 
         if auth.isDemo {
             firestoreDatabases = DemoDataProvider.firestoreDatabases()
+            if !firestoreDatabases.contains(where: { $0.name == selectedFirestoreDatabaseId }),
+               let first = firestoreDatabases.first {
+                selectedFirestoreDatabaseId = first.name
+            }
+            await loadFirestoreCollectionsAtCurrentParent(autoOpenFirst: selectedFirestoreCollectionPath.isEmpty)
+            await loadFirestoreIndexes()
             return
         }
         do {
             let token = try await auth.validAccessToken()
             firestoreDatabases = try await api.listFirestoreDatabases(projectId: projectId, token: token)
+            if !firestoreDatabases.contains(where: { $0.name == selectedFirestoreDatabaseId }),
+               let first = firestoreDatabases.first {
+                selectedFirestoreDatabaseId = first.name
+            }
+            await loadFirestoreCollectionsAtCurrentParent(autoOpenFirst: selectedFirestoreCollectionPath.isEmpty)
+            await loadFirestoreIndexes()
         } catch {
             firestoreError = error.localizedDescription
         }
