@@ -34,6 +34,13 @@ struct StratusApp: App {
                 }
                 .keyboardShortcut("k", modifiers: .command)
 
+                Button("Toggle Agent Drawer") {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        appState.toggleAgentDrawer()
+                    }
+                }
+                .keyboardShortcut("j", modifiers: .command)
+
                 Button("Toggle Sidebar") {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         appState.sidebarCollapsed.toggle()

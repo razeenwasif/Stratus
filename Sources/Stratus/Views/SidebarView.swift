@@ -62,9 +62,15 @@ struct SidebarView: View {
 
             Spacer()
 
+            // In-App Agent Drawer Trigger (⌘J)
+            agentTriggerButton
+                .padding(.horizontal, 14)
+                .padding(.bottom, 8)
+
             // Connection Status & Account Footer
             accountFooter
-                .padding(14)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
         }
         .frame(maxHeight: .infinity)
         .background(T3.bgSidebar)
@@ -162,6 +168,46 @@ struct SidebarView: View {
         }
         .buttonStyle(.plain)
         .onHover { hoveredSection = $0 ? section : nil }
+    }
+
+    private var agentTriggerButton: some View {
+        let isOpen = appState.showAgentDrawer
+        let running = appState.agentChat.isRunning
+        let backend = appState.agentChat.selectedBackend
+
+        return Button {
+            withAnimation(.easeOut(duration: 0.18)) {
+                appState.toggleAgentDrawer()
+            }
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Color(hexString: backend.accentColorHex))
+
+                Text(running ? "\(backend.displayName) working..." : "Agent")
+                    .font(.system(size: 12.5, weight: isOpen ? .semibold : .medium))
+                    .foregroundStyle(isOpen ? T3.textPrimary : T3.textSecondary)
+
+                Spacer()
+
+                if running {
+                    StatusDot(color: Color(hexString: backend.accentColorHex), size: 5, pulse: true)
+                } else {
+                    Text("⌘J")
+                        .font(T3.mono(10, weight: .medium))
+                        .foregroundStyle(T3.textTertiary)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                isOpen ? T3.surfaceActive : T3.surfaceSubtle,
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private var accountFooter: some View {

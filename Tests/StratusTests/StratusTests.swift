@@ -218,4 +218,31 @@ struct StratusTests {
         #expect(callReply?.contains("prod-platform-core") == true)
         #expect(callReply?.contains(#""isError":false"#) == true)
     }
+
+    @Test("AgentChatStore builds CLI arguments and context prompt for Fairy and agy")
+    @MainActor
+    func agentChatArgumentsAndContext() {
+        let fairyArgs = AgentChatStore.buildArguments(
+            backend: .fairy,
+            prompt: "List my VMs",
+            context: "Active GCP Project: prod-platform-core"
+        )
+        #expect(fairyArgs.prefix(4) == ["run", "-q", "-y", "--context"])
+        #expect(fairyArgs.contains("List my VMs"))
+
+        let agyArgs = AgentChatStore.buildArguments(
+            backend: .agy,
+            prompt: "Check logs",
+            context: "Active GCP Project: prod-platform-core"
+        )
+        #expect(agyArgs.first == "-p")
+        #expect(agyArgs.contains("--output-format"))
+        #expect(agyArgs.contains("text"))
+
+        let state = AppState()
+        state.selectedProject = DemoDataProvider.projects.first
+        let ctx = state.agentChat.buildContextPrompt(appState: state)
+        #expect(ctx.contains("prod-platform-core"))
+        #expect(ctx.contains("stratus_*"))
+    }
 }

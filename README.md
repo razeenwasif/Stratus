@@ -125,10 +125,11 @@ This configures:
 | Shortcut | Action |
 | :--- | :--- |
 | `⌘K` | Open Command Palette |
+| `⌘J` | Toggle In-App Agent Drawer (Fairy / Antigravity) |
 | `⌘R` | Refresh active view |
 | `⌘1` – `⌘7` | Jump to Overview, Compute, Cloud Run, Storage, Data & Secrets, Logs, or IAM & APIs |
 | `⌘\` | Toggle sidebar |
-| `Esc` | Close Command Palette or Inspector drawer |
+| `Esc` | Close Command Palette, Agent Drawer, or Inspector drawer |
 
 ---
 

@@ -21,7 +21,11 @@ struct RootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(T3.bg)
 
-                if let selection = appState.inspector {
+                if appState.showAgentDrawer {
+                    AgentDrawerView()
+                        .frame(width: 380)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else if let selection = appState.inspector {
                     InspectorDrawerView(selection: selection)
                         .frame(width: 360)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
@@ -52,7 +56,13 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.16), value: appState.showCommandPalette)
         .animation(.easeOut(duration: 0.18), value: appState.inspector != nil)
+        .animation(.easeOut(duration: 0.18), value: appState.showAgentDrawer)
         .animation(.easeOut(duration: 0.16), value: appState.toastMessage)
+        .onChange(of: appState.inspector) { _, newValue in
+            if newValue != nil {
+                appState.showAgentDrawer = false
+            }
+        }
         .sheet(isPresented: $state.showAuthSheet) {
             AuthSettingsSheet()
                 .environment(appState)
@@ -63,6 +73,10 @@ struct RootView: View {
         .onKeyPress(.escape) {
             if appState.showCommandPalette {
                 appState.showCommandPalette = false
+                return .handled
+            }
+            if appState.showAgentDrawer {
+                appState.showAgentDrawer = false
                 return .handled
             }
             if appState.inspector != nil {

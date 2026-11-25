@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 final class AppState {
     let auth = AuthManager()
     let api = GCPAPIClient()
+    let agentChat = AgentChatStore()
 
     // Navigation & Chrome
     var selectedSection: NavSection = .overview
@@ -15,7 +16,15 @@ final class AppState {
     var sidebarCollapsed = false
     var showCommandPalette = false
     var showAuthSheet = false
+    var showAgentDrawer = false
     var inspector: InspectorSelection?
+
+    func toggleAgentDrawer() {
+        showAgentDrawer.toggle()
+        if showAgentDrawer {
+            inspector = nil
+        }
+    }
 
     // Toast feedback
     var toastMessage: String?

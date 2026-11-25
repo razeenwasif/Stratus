@@ -98,6 +98,18 @@ struct CommandPaletteView: View {
 
         // Actions
         list.append(PaletteEntry(
+            id: "act-agent",
+            icon: "sparkles",
+            tint: T3.indigo,
+            title: "Open Agent Drawer (Fairy / Antigravity)",
+            subtitle: "Chat with Fairy or agy directly inside Stratus",
+            badge: "⌘J"
+        ) {
+            appState.showCommandPalette = false
+            appState.toggleAgentDrawer()
+        })
+
+        list.append(PaletteEntry(
             id: "act-auth",
             icon: "person.badge.key",
             tint: T3.coral,
