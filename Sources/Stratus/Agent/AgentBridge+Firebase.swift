@@ -397,6 +397,7 @@ extension AgentBridge {
         documentPath: String? = nil,
         documentId: String? = nil,
         fieldsJSON: String? = nil,
+        merge: Bool = true,
         filterField: String? = nil,
         filterOp: String? = nil,
         filterValue: String? = nil,
@@ -491,7 +492,7 @@ extension AgentBridge {
                 return .object(["status": .string("simulated"), "relativePath": .string(docPath)])
             }
             let token = try await auth.validAccessToken()
-            let updated = try await api.updateFirestoreDocument(projectId: pid, databaseId: dbId, documentPath: docPath, fields: fields, token: token)
+            let updated = try await api.updateFirestoreDocument(projectId: pid, databaseId: dbId, documentPath: docPath, fields: fields, merge: merge, token: token)
             return encodeDoc(updated)
 
         case "delete":
@@ -508,11 +509,15 @@ extension AgentBridge {
             let docs: [FirestoreDocument]
             if auth.isDemo {
                 let base = DemoDataProvider.firestoreDocuments(projectId: pid, databaseId: dbId, collectionPath: col)
-                if let f = filterField, !f.isEmpty, let v = filterValue, !v.isEmpty {
-                    docs = base.filter { ($0.fields[f]?.displayString ?? "").lowercased() == v.lowercased() }
-                } else {
-                    docs = Array(base.prefix(limit))
-                }
+                docs = FirebaseParser.filterAndSortDocuments(
+                    base,
+                    filterField: filterField,
+                    op: op,
+                    filterValueRaw: filterValue,
+                    orderByField: orderBy,
+                    descending: descending,
+                    limit: limit
+                )
             } else {
                 let parts = col.trimmingCharacters(in: CharacterSet(charactersIn: "/")).split(separator: "/").map(String.init)
                 let colId = parts.last ?? col

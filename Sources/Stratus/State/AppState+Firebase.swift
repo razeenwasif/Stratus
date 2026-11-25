@@ -8,6 +8,7 @@ extension AppState {
         firestoreParentDocumentPath = ""
         selectedFirestoreCollectionPath = ""
         firestoreDocuments = []
+        firestoreNextPageToken = nil
         selectedFirestoreDocument = nil
         firestoreDocSubcollections = []
         firestoreQueryActive = false
@@ -55,6 +56,7 @@ extension AppState {
         selectedFirestoreCollectionPath = clean
         selectedFirestoreDocument = nil
         firestoreDocSubcollections = []
+        firestoreNextPageToken = nil
         firestoreQueryActive = false
         await reloadCurrentFirestoreCollection()
     }
@@ -71,6 +73,7 @@ extension AppState {
                 databaseId: dbId,
                 collectionPath: selectedFirestoreCollectionPath
             )
+            firestoreNextPageToken = nil
             if let first = firestoreDocuments.first {
                 await selectFirestoreDocument(first)
             }
@@ -87,6 +90,7 @@ extension AppState {
                 token: token
             )
             firestoreDocuments = res.documents
+            firestoreNextPageToken = res.nextPageToken
             if let currentId = selectedFirestoreDocument?.documentId,
                let updatedMatch = res.documents.first(where: { $0.documentId == currentId }) {
                 await selectFirestoreDocument(updatedMatch)
@@ -102,6 +106,33 @@ extension AppState {
         }
     }
 
+    func loadMoreFirestoreDocuments() async {
+        guard let projectId = selectedProject?.projectId,
+              !selectedFirestoreCollectionPath.isEmpty,
+              let pageToken = firestoreNextPageToken,
+              !pageToken.isEmpty,
+              !auth.isDemo else { return }
+        let dbId = selectedFirestoreDatabaseId.isEmpty ? "(default)" : selectedFirestoreDatabaseId
+        isLoadingFirestoreDocs = true
+        defer { isLoadingFirestoreDocs = false }
+
+        do {
+            let token = try await auth.validAccessToken()
+            let res = try await api.listFirestoreDocuments(
+                projectId: projectId,
+                databaseId: dbId,
+                collectionPath: selectedFirestoreCollectionPath,
+                pageSize: 60,
+                pageToken: pageToken,
+                token: token
+            )
+            firestoreDocuments.append(contentsOf: res.documents)
+            firestoreNextPageToken = res.nextPageToken
+        } catch {
+            showToast(error.localizedDescription, isError: true)
+        }
+    }
+
     func drillIntoDocumentSubcollection(document: FirestoreDocument, subcollection: String) async {
         firestoreParentDocumentPath = document.relativePath
         await loadFirestoreCollectionsAtCurrentParent(autoOpenFirst: false)
@@ -111,6 +142,43 @@ extension AppState {
     func navigateFirestoreToRoot() async {
         firestoreParentDocumentPath = ""
         await loadFirestoreCollectionsAtCurrentParent(autoOpenFirst: true)
+    }
+
+    func navigateFirestoreBreadcrumb(toCollectionPath path: String) async {
+        let clean = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let parts = clean.split(separator: "/").map(String.init)
+        if parts.count <= 1 {
+            firestoreParentDocumentPath = ""
+        } else {
+            firestoreParentDocumentPath = parts.dropLast().joined(separator: "/")
+        }
+        await loadFirestoreCollectionsAtCurrentParent(autoOpenFirst: false)
+        await openFirestoreCollection(clean)
+    }
+
+    func createFirestoreCollectionAndDocument(
+        collectionName: String,
+        parentDocumentPath: String? = nil,
+        documentId: String?,
+        fieldsJSON: String
+    ) async {
+        let cleanCol = collectionName.trimmingCharacters(in: CharacterSet(charactersIn: "/ "))
+        guard !cleanCol.isEmpty else {
+            showToast("Collection name cannot be empty", isError: true)
+            return
+        }
+        let effectiveParent = (parentDocumentPath ?? firestoreParentDocumentPath).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let fullCollectionPath = effectiveParent.isEmpty ? cleanCol : "\(effectiveParent)/\(cleanCol)"
+        if effectiveParent != firestoreParentDocumentPath {
+            firestoreParentDocumentPath = effectiveParent
+        }
+        if !firestoreCollections.contains(cleanCol) {
+            firestoreCollections.append(cleanCol)
+            firestoreCollections.sort()
+        }
+        selectedFirestoreCollectionPath = fullCollectionPath
+        firestoreDocuments = []
+        await createFirestoreDocument(documentId: documentId, fieldsJSON: fieldsJSON)
     }
 
     func selectFirestoreDocument(_ doc: FirestoreDocument) async {
@@ -212,6 +280,7 @@ extension AppState {
                 databaseId: dbId,
                 documentPath: doc.relativePath,
                 fields: fields,
+                merge: false,
                 token: token
             )
             if let idx = firestoreDocuments.firstIndex(where: { $0.id == doc.id }) {
@@ -281,25 +350,23 @@ extension AppState {
                 databaseId: dbId,
                 collectionPath: selectedFirestoreCollectionPath
             )
-            let cleanField = fieldPath.trimmingCharacters(in: .whitespacesAndNewlines)
-            let cleanVal = valueRaw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if cleanField.isEmpty || cleanVal.isEmpty {
-                firestoreDocuments = Array(base.prefix(max(1, limit)))
-            } else {
-                firestoreDocuments = base.filter { doc in
-                    guard let fieldVal = doc.fields[cleanField] else { return false }
-                    let candidate = fieldVal.displayString.lowercased()
-                    let target = cleanVal.lowercased()
-                    switch op {
-                    case .equal: return candidate == target
-                    case .notEqual: return candidate != target
-                    case .arrayContains: return candidate.contains(target)
-                    default: return candidate.contains(target)
-                    }
-                }
-            }
+            firestoreDocuments = FirebaseParser.filterAndSortDocuments(
+                base,
+                filterField: fieldPath,
+                op: op,
+                filterValueRaw: valueRaw,
+                orderByField: orderBy,
+                descending: descending,
+                limit: limit
+            )
+            firestoreNextPageToken = nil
             firestoreQueryActive = true
-            selectedFirestoreDocument = firestoreDocuments.first
+            if let first = firestoreDocuments.first {
+                await selectFirestoreDocument(first)
+            } else {
+                selectedFirestoreDocument = nil
+                firestoreDocSubcollections = []
+            }
             return
         }
 
@@ -319,6 +386,7 @@ extension AppState {
                 token: token
             )
             firestoreDocuments = results
+            firestoreNextPageToken = nil
             firestoreQueryActive = true
             if let first = results.first {
                 await selectFirestoreDocument(first)

@@ -488,6 +488,11 @@ struct FirebaseView: View {
                                                 .foregroundStyle(T3.sky)
                                         }
                                         Spacer()
+                                        if let url = URL(string: chan.url), !chan.url.isEmpty {
+                                            ActionPillButton(title: "Open", systemImage: "arrow.up.right", tint: T3.sky) {
+                                                NSWorkspace.shared.open(url)
+                                            }
+                                        }
                                         ActionPillButton(title: "Copy URL", systemImage: "doc.on.doc", tint: T3.textSecondary) {
                                             appState.copyToClipboard(chan.url, label: "channel URL")
                                         }
@@ -538,31 +543,37 @@ struct FirebaseView: View {
                     }
 
                     if let ruleset = appState.activeFirebaseRuleset {
-                        ScrollView(.vertical, showsIndicators: false) {
-                            VStack(alignment: .leading, spacing: 14) {
-                                ForEach(ruleset.files) { file in
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack {
-                                            Text(file.name)
-                                                .font(T3.mono(12, weight: .semibold))
-                                                .foregroundStyle(T3.amber)
-                                            Spacer()
-                                            ActionPillButton(title: "Copy Rules", systemImage: "doc.on.doc", tint: T3.mint) {
-                                                appState.copyToClipboard(file.content, label: file.name)
+                        if ruleset.files.isEmpty {
+                            EmptyStateView(icon: "doc.text", title: "Empty ruleset", message: "Ruleset \(ruleset.shortId) contains no source files.")
+                        } else {
+                            ScrollView(.vertical, showsIndicators: false) {
+                                VStack(alignment: .leading, spacing: 14) {
+                                    ForEach(ruleset.files) { file in
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            HStack {
+                                                Text(file.name)
+                                                    .font(T3.mono(12, weight: .semibold))
+                                                    .foregroundStyle(T3.amber)
+                                                Spacer()
+                                                ActionPillButton(title: "Copy Rules", systemImage: "doc.on.doc", tint: T3.mint) {
+                                                    appState.copyToClipboard(file.content, label: file.name)
+                                                }
                                             }
+                                            Text(file.content)
+                                                .font(T3.mono(12))
+                                                .foregroundStyle(T3.textPrimary)
+                                                .textSelection(.enabled)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+                                                .padding(14)
+                                                .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                                         }
-                                        Text(file.content)
-                                            .font(T3.mono(12))
-                                            .foregroundStyle(T3.textPrimary)
-                                            .textSelection(.enabled)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-                                            .padding(14)
-                                            .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                                     }
                                 }
+                                .padding(.bottom, 32)
                             }
-                            .padding(.bottom, 32)
                         }
+                    } else {
+                        EmptyStateView(icon: "lock.doc", title: "No ruleset loaded", message: "Select a rules release above to inspect its source rules.")
                     }
                 }
             }
@@ -786,6 +797,15 @@ struct FirebaseView: View {
                                 }
                             }
                         }
+                    }
+                    .onChange(of: appState.realtimeDBPath) { _, newPath in
+                        if rtdbPathInput != newPath {
+                            rtdbPathInput = newPath
+                        }
+                        confirmDeleteRTDB = false
+                    }
+                    .onChange(of: rtdbPathInput) { _, _ in
+                        confirmDeleteRTDB = false
                     }
 
                     if rtdbEditing {

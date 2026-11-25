@@ -59,6 +59,93 @@ struct FirebaseFirestoreTests {
         #expect(fields["settings"] == .map(["dark": .boolean(true)]))
     }
 
+    @Test("FirebaseParser query encoding and Remote Config publish sanitization")
+    func queryEncodingAndRemoteConfigSanitization() throws {
+        let encoded = FirebaseParser.encodeQueryValue("abc+def/ghi=123&x y")
+        #expect(!encoded.contains("+"))
+        #expect(!encoded.contains("/"))
+        #expect(!encoded.contains("="))
+        #expect(!encoded.contains("&"))
+        #expect(!encoded.contains(" "))
+
+        let fetchedTemplate = """
+        {
+          "parameters": {
+            "flag_a": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" }
+          },
+          "conditions": [
+            { "name": "iOS", "expression": "device.os == 'ios'" }
+          ],
+          "version": {
+            "versionNumber": "42",
+            "updateTime": "2026-11-26T00:00:00Z",
+            "updateUser": { "email": "ada@stratus.dev" },
+            "updateOrigin": "CONSOLE",
+            "updateType": "INCREMENTAL_UPDATE",
+            "description": "Enable flag A"
+          }
+        }
+        """
+        let sanitizedData = try FirebaseParser.sanitizeRemoteConfigForPublish(fetchedTemplate)
+        let obj = try JSONSerialization.jsonObject(with: sanitizedData) as? [String: Any]
+        let version = obj?["version"] as? [String: Any]
+        #expect(version?["description"] as? String == "Enable flag A")
+        #expect(version?["versionNumber"] == nil)
+        #expect(version?["updateTime"] == nil)
+        #expect(version?["updateUser"] == nil)
+        #expect(obj?["parameters"] != nil)
+        #expect(obj?["conditions"] != nil)
+    }
+
+    @Test("FirebaseParser filterAndSortDocuments supports numeric, boolean, array-contains, sorting, and limit")
+    func filterAndSortDocuments() {
+        let docs = DemoDataProvider.firestoreDocuments(projectId: "prod-platform-core", collectionPath: "users")
+
+        let highCredits = FirebaseParser.filterAndSortDocuments(
+            docs,
+            filterField: "credits",
+            op: .greaterThan,
+            filterValueRaw: "1000",
+            orderByField: "credits",
+            descending: true,
+            limit: 10
+        )
+        #expect(highCredits.map(\.documentId) == ["usr_grace_02", "usr_ada_01"])
+
+        let lowCredits = FirebaseParser.filterAndSortDocuments(
+            docs,
+            filterField: "credits",
+            op: .lessThanOrEqual,
+            filterValueRaw: "4200",
+            orderByField: "credits",
+            descending: false,
+            limit: 1
+        )
+        #expect(lowCredits.map(\.documentId) == ["usr_alan_03"])
+
+        let admins = FirebaseParser.filterAndSortDocuments(
+            docs,
+            filterField: "roles",
+            op: .arrayContains,
+            filterValueRaw: "admin",
+            orderByField: nil,
+            descending: false,
+            limit: 50
+        )
+        #expect(admins.map(\.documentId) == ["usr_ada_01"])
+
+        let notFree = FirebaseParser.filterAndSortDocuments(
+            docs,
+            filterField: "plan",
+            op: .notEqual,
+            filterValueRaw: "free",
+            orderByField: nil,
+            descending: false,
+            limit: 50
+        )
+        #expect(notFree.count == 2)
+    }
+
     @Test("FirebaseParser decodes Firestore documents list, runQuery, and indexes")
     func decodeFirestoreRESTPayloads() throws {
         let listJSON = """
@@ -256,29 +343,83 @@ struct FirebaseFirestoreTests {
         #expect(rtdb.first?.instanceId == "p-default-rtdb")
     }
 
-    @Test("MCPServer exposes and executes stratus_firebase and stratus_firestore in demo mode")
+    @Test("DeepLinkParser and AgentChatStore support Firebase and Firestore context")
     @MainActor
-    func mcpFirebaseAndFirestoreTools() async {
+    func deepLinksAndAgentContext() {
+        for sec in ["firebase", "hosting", "rtdb", "remoteconfig"] {
+            let url = URL(string: "stratus://navigate?section=\(sec)&project=prod-platform-core")!
+            let parsed = DeepLinkParser.parse(url)
+            #expect(parsed.section == .firebase)
+            #expect(parsed.projectId == "prod-platform-core")
+        }
+
+        let state = AppState()
+        state.selectedProject = DemoDataProvider.projects.first
+        state.firebaseApps = DemoDataProvider.firebaseApps(for: "prod-platform-core")
+        state.selectedFirestoreCollectionPath = "users"
+        state.firestoreDocuments = DemoDataProvider.firestoreDocuments(projectId: "prod-platform-core", collectionPath: "users")
+        let ctx = state.agentChat.buildContextPrompt(appState: state)
+        #expect(ctx.contains("stratus_firebase"))
+        #expect(ctx.contains("stratus_firestore"))
+        #expect(ctx.contains("3 Firebase apps"))
+        #expect(ctx.contains("col 'users'"))
+    }
+
+    @Test("MCPServer executes every stratus_firebase and stratus_firestore action in demo mode")
+    @MainActor
+    func mcpAllFirebaseAndFirestoreActions() async {
         let server = MCPServer()
 
         let listReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":10,"method":"tools/list"}"#)
         #expect(listReply?.contains("stratus_firebase") == true)
         #expect(listReply?.contains("stratus_firestore") == true)
 
-        let fbAppsReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"stratus_firebase","arguments":{"action":"apps","demo":true}}}"#)
-        #expect(fbAppsReply?.contains(#""isError":false"#) == true)
-        #expect(fbAppsReply?.contains("Stratus Web Console") == true)
+        let firebaseCalls: [(String, String)] = [
+            ("project", #"{ "action": "project", "demo": true }"#),
+            ("apps", #"{ "action": "apps", "demo": true }"#),
+            ("app_config", #"{ "action": "app_config", "appId": "1:849201746312:web:9f24c8a10d3b7e12", "demo": true }"#),
+            ("auth_list", #"{ "action": "auth_list", "demo": true }"#),
+            ("auth_create", #"{ "action": "auth_create", "email": "new@stratus.dev", "password": "secret123", "demo": true }"#),
+            ("auth_disable", #"{ "action": "auth_disable", "localId": "uid_9f10a2b4", "demo": true }"#),
+            ("auth_enable", #"{ "action": "auth_enable", "localId": "uid_9f10a2b4", "demo": true }"#),
+            ("auth_delete", #"{ "action": "auth_delete", "localId": "uid_9f10a2b4", "demo": true }"#),
+            ("hosting_sites", #"{ "action": "hosting_sites", "demo": true }"#),
+            ("hosting_releases", #"{ "action": "hosting_releases", "demo": true }"#),
+            ("hosting_channels", #"{ "action": "hosting_channels", "demo": true }"#),
+            ("rules_list", #"{ "action": "rules_list", "demo": true }"#),
+            ("rules_get", #"{ "action": "rules_get", "demo": true }"#),
+            ("remote_config_get", #"{ "action": "remote_config_get", "demo": true }"#),
+            ("remote_config_publish", #"{ "action": "remote_config_publish", "rawJSON": "{\"parameters\":{\"k\":{\"defaultValue\":{\"value\":\"1\"}}}}", "demo": true }"#),
+            ("remote_config_versions", #"{ "action": "remote_config_versions", "demo": true }"#),
+            ("rtdb_instances", #"{ "action": "rtdb_instances", "demo": true }"#),
+            ("rtdb_get", #"{ "action": "rtdb_get", "path": "/presence", "shallow": false, "demo": true }"#),
+            ("rtdb_set", #"{ "action": "rtdb_set", "path": "/presence", "rawJSON": "{\"online\":true}", "demo": true }"#),
+            ("rtdb_delete", #"{ "action": "rtdb_delete", "path": "/presence", "demo": true }"#)
+        ]
 
-        let fbAuthReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"stratus_firebase","arguments":{"action":"auth_list","demo":true}}}"#)
-        #expect(fbAuthReply?.contains(#""isError":false"#) == true)
-        #expect(fbAuthReply?.contains("ada@stratus.dev") == true)
+        for (idx, (label, argsJSON)) in firebaseCalls.enumerated() {
+            let msg = #"{"jsonrpc":"2.0","id":\#(100 + idx),"method":"tools/call","params":{"name":"stratus_firebase","arguments":\#(argsJSON)}}"#
+            let reply = await server.handleMessage(msg)
+            #expect(reply?.contains(#""isError":false"#) == true, "Expected \(label) to succeed")
+        }
 
-        let fsListReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"stratus_firestore","arguments":{"action":"list","collectionPath":"users","demo":true}}}"#)
-        #expect(fsListReply?.contains(#""isError":false"#) == true)
-        #expect(fsListReply?.contains("usr_ada_01") == true)
+        let firestoreCalls: [(String, String)] = [
+            ("databases", #"{ "action": "databases", "demo": true }"#),
+            ("collections", #"{ "action": "collections", "demo": true }"#),
+            ("subcollections", #"{ "action": "collections", "documentPath": "users/usr_ada_01", "demo": true }"#),
+            ("list", #"{ "action": "list", "collectionPath": "users", "demo": true }"#),
+            ("get", #"{ "action": "get", "documentPath": "users/usr_ada_01", "demo": true }"#),
+            ("create", #"{ "action": "create", "collectionPath": "users", "fieldsJSON": "{\"email\":\"test@stratus.dev\"}", "demo": true }"#),
+            ("update", #"{ "action": "update", "documentPath": "users/usr_ada_01", "fieldsJSON": "{\"credits\":9999}", "merge": false, "demo": true }"#),
+            ("delete", #"{ "action": "delete", "documentPath": "users/usr_ada_01", "demo": true }"#),
+            ("query", #"{ "action": "query", "collectionPath": "users", "filterField": "credits", "filterOp": "GREATER_THAN", "filterValue": "1000", "orderBy": "credits", "descending": true, "limit": 5, "demo": true }"#),
+            ("indexes", #"{ "action": "indexes", "demo": true }"#)
+        ]
 
-        let fsQueryReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"stratus_firestore","arguments":{"action":"query","collectionPath":"users","filterField":"plan","filterOp":"EQUAL","filterValue":"pro","demo":true}}}"#)
-        #expect(fsQueryReply?.contains(#""isError":false"#) == true)
-        #expect(fsQueryReply?.contains("usr_ada_01") == true)
+        for (idx, (label, argsJSON)) in firestoreCalls.enumerated() {
+            let msg = #"{"jsonrpc":"2.0","id":\#(200 + idx),"method":"tools/call","params":{"name":"stratus_firestore","arguments":\#(argsJSON)}}"#
+            let reply = await server.handleMessage(msg)
+            #expect(reply?.contains(#""isError":false"#) == true, "Expected \(label) to succeed")
+        }
     }
 }

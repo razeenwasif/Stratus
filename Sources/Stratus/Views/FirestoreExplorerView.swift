@@ -15,11 +15,22 @@ struct FirestoreExplorerView: View {
     @State private var queryOp: FirestoreQueryOperator = .equal
     @State private var queryValue = ""
     @State private var queryOrderBy = ""
+    @State private var queryDescending = false
     @State private var queryLimit = 50
 
     @State private var editingJSON = false
     @State private var docJSONDraft = "{}"
     @State private var confirmDeleteDocId: String?
+
+    @State private var showCreateCollection = false
+    @State private var newCollectionName = ""
+    @State private var newCollectionDocId = ""
+    @State private var newCollectionDocJSON = "{\n  \"created\": true\n}"
+
+    @State private var showCreateSubcollection = false
+    @State private var newSubcollectionName = ""
+    @State private var newSubcollectionDocId = ""
+    @State private var newSubcollectionDocJSON = "{\n  \"created\": true\n}"
 
     @State private var showCreateDoc = false
     @State private var newDocId = ""
@@ -48,6 +59,11 @@ struct FirestoreExplorerView: View {
                 }
             }
         }
+        .onChange(of: appState.selectedFirestoreDocument?.id) { _, _ in
+            editingJSON = false
+            confirmDeleteDocId = nil
+            showCreateSubcollection = false
+        }
     }
 
     private var topControlBar: some View {
@@ -61,25 +77,39 @@ struct FirestoreExplorerView: View {
                 }
             }
 
-            // Breadcrumbs when inside a subcollection or collection
-            HStack(spacing: 5) {
-                Button {
-                    Task { await appState.navigateFirestoreToRoot() }
-                } label: {
-                    Text("root")
-                        .font(T3.mono(11.5, weight: .semibold))
-                        .foregroundStyle(appState.firestoreParentDocumentPath.isEmpty ? T3.textPrimary : T3.sky)
-                }
-                .buttonStyle(.plain)
+            // Clickable multi-level breadcrumbs
+            let segments = appState.selectedFirestoreCollectionPath
+                .split(separator: "/")
+                .map(String.init)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 5) {
+                    Button {
+                        Task { await appState.navigateFirestoreToRoot() }
+                    } label: {
+                        Text("root")
+                            .font(T3.mono(11.5, weight: .semibold))
+                            .foregroundStyle(appState.firestoreParentDocumentPath.isEmpty ? T3.textPrimary : T3.sky)
+                    }
+                    .buttonStyle(.plain)
 
-                if !appState.selectedFirestoreCollectionPath.isEmpty {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 9))
-                        .foregroundStyle(T3.textTertiary)
-                    Text(appState.selectedFirestoreCollectionPath)
-                        .font(T3.mono(11.5))
-                        .foregroundStyle(T3.mint)
-                        .lineLimit(1)
+                    ForEach(Array(segments.enumerated()), id: \.offset) { idx, seg in
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9))
+                            .foregroundStyle(T3.textTertiary)
+                        let isCollectionSeg = (idx % 2 == 0)
+                        let targetCollection = isCollectionSeg
+                            ? segments[0...idx].joined(separator: "/")
+                            : segments[0..<idx].joined(separator: "/")
+                        Button {
+                            Task { await appState.navigateFirestoreBreadcrumb(toCollectionPath: targetCollection) }
+                        } label: {
+                            Text(seg)
+                                .font(T3.mono(11.5, weight: idx == segments.count - 1 ? .semibold : .regular))
+                                .foregroundStyle(isCollectionSeg ? T3.mint : T3.amber)
+                                .lineLimit(1)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
             .padding(.horizontal, 10)
@@ -111,8 +141,59 @@ struct FirestoreExplorerView: View {
                         .tracking(0.8)
                         .foregroundStyle(T3.textTertiary)
                     Spacer()
+                    ActionPillButton(title: "New", systemImage: showCreateCollection ? "xmark" : "folder.badge.plus", tint: T3.amber) {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            showCreateCollection.toggle()
+                        }
+                    }
                 }
                 .padding(.horizontal, 6)
+
+                if showCreateCollection {
+                    VStack(alignment: .leading, spacing: 6) {
+                        TextField("", text: $newCollectionName, prompt: Text("Collection name").foregroundStyle(T3.textTertiary))
+                            .textFieldStyle(.plain)
+                            .font(T3.mono(11.5))
+                            .foregroundStyle(T3.textPrimary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
+
+                        TextField("", text: $newCollectionDocId, prompt: Text("First doc ID (optional)").foregroundStyle(T3.textTertiary))
+                            .textFieldStyle(.plain)
+                            .font(T3.mono(11.5))
+                            .foregroundStyle(T3.textPrimary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 6)
+                            .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
+
+                        TextEditor(text: $newCollectionDocJSON)
+                            .font(T3.mono(11))
+                            .foregroundStyle(T3.textPrimary)
+                            .scrollContentBackground(.hidden)
+                            .padding(6)
+                            .frame(height: 68)
+                            .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
+
+                        ActionPillButton(title: "Create", systemImage: "checkmark", tint: T3.mint, isLoading: appState.isMutatingFirestore) {
+                            let col = newCollectionName
+                            let docId = newCollectionDocId
+                            let json = newCollectionDocJSON
+                            Task {
+                                await appState.createFirestoreCollectionAndDocument(
+                                    collectionName: col,
+                                    documentId: docId.isEmpty ? nil : docId,
+                                    fieldsJSON: json
+                                )
+                                newCollectionName = ""
+                                newCollectionDocId = ""
+                                showCreateCollection = false
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
 
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 3) {
@@ -146,7 +227,7 @@ struct FirestoreExplorerView: View {
                     }
                 }
             }
-            .frame(width: 185)
+            .frame(width: 195)
 
             // Column 2: Documents + Structured Query
             VStack(alignment: .leading, spacing: 10) {
@@ -200,7 +281,7 @@ struct FirestoreExplorerView: View {
                                 .padding(.vertical, 6)
                                 .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
                         }
-                        HStack(spacing: 8) {
+                        HStack(spacing: 6) {
                             TextField("", text: $queryOrderBy, prompt: Text("orderBy (optional)").foregroundStyle(T3.textTertiary))
                                 .textFieldStyle(.plain)
                                 .font(T3.mono(11.5))
@@ -209,6 +290,18 @@ struct FirestoreExplorerView: View {
                                 .padding(.vertical, 6)
                                 .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
 
+                            FilterPillButton(title: queryDescending ? "DESC" : "ASC", isSelected: queryDescending) {
+                                queryDescending.toggle()
+                            }
+
+                            Picker("", selection: $queryLimit) {
+                                Text("25").tag(25)
+                                Text("50").tag(50)
+                                Text("100").tag(100)
+                            }
+                            .labelsHidden()
+                            .frame(width: 60)
+
                             ActionPillButton(title: "Run", systemImage: "play.fill", tint: T3.mint) {
                                 Task {
                                     await appState.runFirestoreStructuredQuery(
@@ -216,7 +309,7 @@ struct FirestoreExplorerView: View {
                                         op: queryOp,
                                         valueRaw: queryValue,
                                         orderBy: queryOrderBy,
-                                        descending: false,
+                                        descending: queryDescending,
                                         limit: queryLimit
                                     )
                                 }
@@ -226,6 +319,7 @@ struct FirestoreExplorerView: View {
                                     queryField = ""
                                     queryValue = ""
                                     queryOrderBy = ""
+                                    queryDescending = false
                                     Task { await appState.clearFirestoreQuery() }
                                 }
                             }
@@ -291,8 +385,6 @@ struct FirestoreExplorerView: View {
                             ForEach(appState.firestoreDocuments) { doc in
                                 let isSelected = appState.selectedFirestoreDocument?.id == doc.id
                                 Button {
-                                    editingJSON = false
-                                    confirmDeleteDocId = nil
                                     Task { await appState.selectFirestoreDocument(doc) }
                                 } label: {
                                     VStack(alignment: .leading, spacing: 3) {
@@ -322,17 +414,29 @@ struct FirestoreExplorerView: View {
                                 }
                                 .buttonStyle(.plain)
                             }
+
+                            if appState.firestoreNextPageToken != nil {
+                                ActionPillButton(
+                                    title: "Load More",
+                                    systemImage: "arrow.down.circle",
+                                    tint: T3.sky,
+                                    isLoading: appState.isLoadingFirestoreDocs
+                                ) {
+                                    Task { await appState.loadMoreFirestoreDocuments() }
+                                }
+                                .padding(.top, 6)
+                            }
                         }
                         .padding(.bottom, 32)
                     }
                 }
             }
-            .frame(minWidth: 260, maxWidth: 340)
+            .frame(minWidth: 270, maxWidth: 360)
 
             // Column 3: Document Inspector & Editor
             VStack(alignment: .leading, spacing: 12) {
                 if let doc = appState.selectedFirestoreDocument {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(doc.documentId)
                                 .font(T3.mono(14, weight: .semibold))
@@ -342,6 +446,16 @@ struct FirestoreExplorerView: View {
                                 .foregroundStyle(T3.textTertiary)
                         }
                         Spacer()
+
+                        ActionPillButton(title: "Copy Path", systemImage: "doc.on.doc", tint: T3.textSecondary) {
+                            appState.copyToClipboard(doc.relativePath, label: "document path")
+                        }
+
+                        ActionPillButton(title: "+ Sub", systemImage: "folder.badge.plus", tint: T3.amber) {
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                showCreateSubcollection.toggle()
+                            }
+                        }
 
                         FilterPillButton(title: editingJSON ? "Fields" : "Edit JSON", isSelected: editingJSON) {
                             if !editingJSON {
@@ -369,6 +483,59 @@ struct FirestoreExplorerView: View {
                                 confirmDeleteDocId = doc.id
                             }
                         }
+                    }
+
+                    if showCreateSubcollection {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("CREATE SUBCOLLECTION UNDER \(doc.documentId)")
+                                .font(T3.mono(10.5, weight: .semibold))
+                                .foregroundStyle(T3.amber)
+                            HStack(spacing: 8) {
+                                TextField("", text: $newSubcollectionName, prompt: Text("Subcollection name").foregroundStyle(T3.textTertiary))
+                                    .textFieldStyle(.plain)
+                                    .font(T3.mono(12))
+                                    .foregroundStyle(T3.textPrimary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
+
+                                TextField("", text: $newSubcollectionDocId, prompt: Text("Doc ID (optional)").foregroundStyle(T3.textTertiary))
+                                    .textFieldStyle(.plain)
+                                    .font(T3.mono(12))
+                                    .foregroundStyle(T3.textPrimary)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 6)
+                                    .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
+                            }
+                            TextEditor(text: $newSubcollectionDocJSON)
+                                .font(T3.mono(11.5))
+                                .foregroundStyle(T3.textPrimary)
+                                .scrollContentBackground(.hidden)
+                                .padding(8)
+                                .frame(height: 80)
+                                .background(T3.surfaceHover, in: RoundedRectangle(cornerRadius: 6))
+                            HStack {
+                                Spacer()
+                                ActionPillButton(title: "Create Subcollection", systemImage: "checkmark", tint: T3.mint, isLoading: appState.isMutatingFirestore) {
+                                    let sub = newSubcollectionName
+                                    let subDocId = newSubcollectionDocId
+                                    let subJSON = newSubcollectionDocJSON
+                                    Task {
+                                        await appState.createFirestoreCollectionAndDocument(
+                                            collectionName: sub,
+                                            parentDocumentPath: doc.relativePath,
+                                            documentId: subDocId.isEmpty ? nil : subDocId,
+                                            fieldsJSON: subJSON
+                                        )
+                                        newSubcollectionName = ""
+                                        newSubcollectionDocId = ""
+                                        showCreateSubcollection = false
+                                    }
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                     }
 
                     if !appState.firestoreDocSubcollections.isEmpty {
@@ -445,7 +612,7 @@ struct FirestoreExplorerView: View {
                                         TagPill(text: idx.state, color: idx.state == "READY" ? T3.mint : T3.amber, monospaced: true)
                                     }
                                     FlowWrapLayout(horizontalSpacing: 6, verticalSpacing: 4) {
-                                        ForEach(idx.fields, id: \.fieldPath) { f in
+                                        ForEach(Array(idx.fields.enumerated()), id: \.offset) { _, f in
                                             TagPill(text: "\(f.fieldPath) (\(f.orderOrMode))", monospaced: true)
                                         }
                                     }

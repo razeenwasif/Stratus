@@ -225,12 +225,12 @@ enum StratusCLI {
           firebase auth list|create|disable|enable|delete ...
           firebase hosting sites|releases|channels [siteId]
           firebase rules list|get [rulesetName]
-          firebase remote-config get|versions|publish <json>
+          firebase remote-config get|versions|publish '<json>' [--etag <etag>]
           firebase rtdb instances|get|set|delete [path] [json]
           firestore databases|collections|indexes [parentDocPath]
           firestore list <col> | get <doc> | delete <doc>
-          firestore create <col> <json> [--id <docId>] | update <doc> <json>
-          firestore query <col> [--field F] [--op OP] [--value V] [--limit N]
+          firestore create <col> <json> [--id <docId>] | update <doc> <json> [--replace]
+          firestore query <col> [--field F] [--op OP] [--value V] [--order-by F] [--desc] [--limit N]
           open [section]                  Open Stratus UI (overview|compute|cloudRun|storage|dataServices|firebase|logging|iamAndApis)
 
         Global Options:
@@ -298,13 +298,15 @@ enum StratusCLI {
                 throw AgentBridgeError.invalidArgument("Unknown firebase rules subcommand: \(op)")
             }
         case "remote-config":
-            let op = tail.first ?? "get"
+            var rcArgs = tail
+            let etag = extractOption("--etag", from: &rcArgs)
+            let op = rcArgs.first ?? "get"
             switch op {
             case "get": return try await bridge.firebase(projectId: projectId, action: "remote_config_get", demo: demo)
             case "versions": return try await bridge.firebase(projectId: projectId, action: "remote_config_versions", demo: demo)
             case "publish":
-                guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firebase remote-config publish '<json>'") }
-                return try await bridge.firebase(projectId: projectId, action: "remote_config_publish", rawJSON: tail[1], demo: demo)
+                guard rcArgs.count >= 2 else { throw AgentBridgeError.missingArgument("firebase remote-config publish '<json>' [--etag <etag>]") }
+                return try await bridge.firebase(projectId: projectId, action: "remote_config_publish", rawJSON: rcArgs[1], etag: etag, demo: demo)
             default: throw AgentBridgeError.invalidArgument("Unknown remote-config subcommand: \(op)")
             }
         case "rtdb":
@@ -360,8 +362,9 @@ enum StratusCLI {
             guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firestore create <collectionPath> '<fieldsJSON>' [--id <docId>]") }
             return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "create", collectionPath: tail[0], documentId: docId, fieldsJSON: tail[1], demo: demo)
         case "update":
-            guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firestore update <documentPath> '<fieldsJSON>'") }
-            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "update", documentPath: tail[0], fieldsJSON: tail[1], demo: demo)
+            let replace = extractFlag("--replace", from: &tail)
+            guard tail.count >= 2 else { throw AgentBridgeError.missingArgument("firestore update <documentPath> '<fieldsJSON>' [--replace]") }
+            return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "update", documentPath: tail[0], fieldsJSON: tail[1], merge: !replace, demo: demo)
         case "delete":
             guard let doc = tail.first else { throw AgentBridgeError.missingArgument("firestore delete <documentPath>") }
             return try await bridge.firestore(projectId: projectId, databaseId: dbId, action: "delete", documentPath: doc, demo: demo)

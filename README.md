@@ -125,6 +125,8 @@ This configures:
 | `stratus_list_buckets` / `stratus_list_objects` / `stratus_read_object` | `stratus storage buckets\|ls\|cat` | Browse & read GCS objects |
 | `stratus_pubsub` | `stratus pubsub [publish ...]` | List Pub/Sub topics/subscriptions & publish |
 | `stratus_databases` | `stratus db [firestore\|spanner\|redis]` | Inspect Firestore, Spanner & Memorystore Redis |
+| `stratus_firebase` | `stratus firebase <subcommand>` | Manage Firebase project, apps/SDK configs, Auth, Hosting, Rules, Remote Config & RTDB |
+| `stratus_firestore` | `stratus firestore <subcommand>` | Firestore REST CRUD, subcollections, structured queries & composite indexes |
 | `stratus_monitoring` | `stratus metrics [kind] [--hours N]` | Query Cloud Monitoring CPU, Memory & request series |
 | `stratus_query_logs` | `stratus logs --filter "..."` | Query Cloud Logging |
 | `stratus_list_iam` / `stratus_list_apis` / `stratus_toggle_api` | `stratus iam` / `stratus apis ...` | Inspect IAM & toggle GCP APIs |
@@ -140,7 +142,7 @@ This configures:
 | `⌘K` | Open Command Palette |
 | `⌘J` | Toggle In-App Agent Drawer (Fairy / Antigravity) |
 | `⌘R` | Refresh active view |
-| `⌘1` – `⌘9` | Jump to Overview, Compute & GKE, Serverless, Network & CI, Storage, Data & Pub/Sub, Monitoring, Logs, or Security & IAM |
+| `⌘1` – `⌘9`, `⌘0` | Jump to Overview, Compute & GKE, Serverless, Network & CI, Storage, Data & Pub/Sub, Monitoring, Logs, Security & IAM, or Firebase |
 | `⌘\` | Toggle sidebar |
 | `Esc` | Close Command Palette, Agent Drawer, or Inspector drawer |
 

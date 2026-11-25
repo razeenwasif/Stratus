@@ -13,6 +13,103 @@ enum FirebaseParser {
             .joined(separator: "/")
     }
 
+    static func encodeQueryValue(_ value: String) -> String {
+        var allowed = CharacterSet.urlQueryAllowed
+        allowed.remove(charactersIn: "/?#&=+%")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
+    }
+
+    static func sanitizeRemoteConfigForPublish(_ rawJSON: String) throws -> Data {
+        guard let obj = try JSONSerialization.jsonObject(with: Data(rawJSON.utf8)) as? [String: Any] else {
+            throw GCPAPIError.decodingError("Remote Config template must be a JSON object")
+        }
+        var cleaned = obj
+        if let ver = cleaned["version"] as? [String: Any] {
+            if let desc = ver["description"] as? String, !desc.isEmpty {
+                cleaned["version"] = ["description": desc]
+            } else {
+                cleaned.removeValue(forKey: "version")
+            }
+        }
+        return try JSONSerialization.data(withJSONObject: cleaned, options: [.sortedKeys])
+    }
+
+    static func filterAndSortDocuments(
+        _ docs: [FirestoreDocument],
+        filterField: String?,
+        op: FirestoreQueryOperator,
+        filterValueRaw: String?,
+        orderByField: String?,
+        descending: Bool,
+        limit: Int
+    ) -> [FirestoreDocument] {
+        var results = docs
+        let cleanField = filterField?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let cleanValue = filterValueRaw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !cleanField.isEmpty && !cleanValue.isEmpty {
+            let target = inferTypedValue(from: cleanValue)
+            results = results.filter { doc in
+                guard let fieldVal = doc.fields[cleanField] else { return false }
+                switch op {
+                case .equal:
+                    return fieldVal == target || fieldVal.displayString.caseInsensitiveCompare(cleanValue) == .orderedSame
+                case .notEqual:
+                    return fieldVal != target && fieldVal.displayString.caseInsensitiveCompare(cleanValue) != .orderedSame
+                case .lessThan:
+                    return compareFirestoreValues(fieldVal, target) == .orderedAscending
+                case .lessThanOrEqual:
+                    let cmp = compareFirestoreValues(fieldVal, target)
+                    return cmp == .orderedAscending || cmp == .orderedSame
+                case .greaterThan:
+                    return compareFirestoreValues(fieldVal, target) == .orderedDescending
+                case .greaterThanOrEqual:
+                    let cmp = compareFirestoreValues(fieldVal, target)
+                    return cmp == .orderedDescending || cmp == .orderedSame
+                case .arrayContains:
+                    if case .array(let arr) = fieldVal {
+                        return arr.contains { $0 == target || $0.displayString.caseInsensitiveCompare(cleanValue) == .orderedSame }
+                    }
+                    return fieldVal.displayString.localizedCaseInsensitiveContains(cleanValue)
+                }
+            }
+        }
+
+        if let order = orderByField?.trimmingCharacters(in: .whitespacesAndNewlines), !order.isEmpty {
+            results.sort { lhs, rhs in
+                let lVal = lhs.fields[order] ?? .null
+                let rVal = rhs.fields[order] ?? .null
+                let cmp = compareFirestoreValues(lVal, rVal)
+                if cmp == .orderedSame {
+                    return descending ? lhs.documentId > rhs.documentId : lhs.documentId < rhs.documentId
+                }
+                return descending ? cmp == .orderedDescending : cmp == .orderedAscending
+            }
+        }
+
+        return Array(results.prefix(max(1, min(limit, 500))))
+    }
+
+    private static func compareFirestoreValues(_ lhs: FirestoreValue, _ rhs: FirestoreValue) -> ComparisonResult {
+        if let lNum = numericValue(lhs), let rNum = numericValue(rhs) {
+            if lNum < rNum { return .orderedAscending }
+            if lNum > rNum { return .orderedDescending }
+            return .orderedSame
+        }
+        if case .boolean(let lBool) = lhs, case .boolean(let rBool) = rhs {
+            if lBool == rBool { return .orderedSame }
+            return !lBool && rBool ? .orderedAscending : .orderedDescending
+        }
+        return lhs.displayString.localizedCaseInsensitiveCompare(rhs.displayString)
+    }
+
+    private static func numericValue(_ value: FirestoreValue) -> Double? {
+        switch value {
+        case .integer(let i): return Double(i)
+        case .double(let d): return d
+        default: return nil
+        }
+    }
+
     static func decodeFirestoreDocument(from data: Data) throws -> FirestoreDocument {
         guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw GCPAPIError.decodingError("Invalid Firestore document JSON")
@@ -536,6 +633,7 @@ extension GCPAPIClient {
             urlString: urlString,
             method: "POST",
             body: Data("{\"pageSize\":100}".utf8),
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try JSONDecoder().decode(Response.self, from: data).collectionIds ?? []
@@ -553,10 +651,13 @@ extension GCPAPIClient {
         let cleanCol = collectionPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         var url = "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/\(db)/documents/\(FirebaseParser.encodePathSegments(cleanCol))?pageSize=\(max(1, min(pageSize, 300)))"
         if let pageToken, !pageToken.isEmpty {
-            let encoded = pageToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? pageToken
-            url += "&pageToken=\(encoded)"
+            url += "&pageToken=\(FirebaseParser.encodeQueryValue(pageToken))"
         }
-        let data = try await rawRequest(urlString: url, token: token)
+        let data = try await rawRequest(
+            urlString: url,
+            extraHeaders: ["x-goog-user-project": projectId],
+            token: token
+        )
         return try FirebaseParser.decodeFirestoreDocumentsList(from: data)
     }
 
@@ -569,7 +670,11 @@ extension GCPAPIClient {
         let db = databaseId.isEmpty ? "(default)" : databaseId
         let cleanDoc = documentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let url = "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/\(db)/documents/\(FirebaseParser.encodePathSegments(cleanDoc))"
-        let data = try await rawRequest(urlString: url, token: token)
+        let data = try await rawRequest(
+            urlString: url,
+            extraHeaders: ["x-goog-user-project": projectId],
+            token: token
+        )
         return try FirebaseParser.decodeFirestoreDocument(from: data)
     }
 
@@ -585,12 +690,17 @@ extension GCPAPIClient {
         let cleanCol = collectionPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         var url = "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/\(db)/documents/\(FirebaseParser.encodePathSegments(cleanCol))"
         if let docId = documentId?.trimmingCharacters(in: .whitespacesAndNewlines), !docId.isEmpty {
-            let encodedId = docId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? docId
-            url += "?documentId=\(encodedId)"
+            url += "?documentId=\(FirebaseParser.encodeQueryValue(docId))"
         }
         let bodyObj: [String: Any] = ["fields": FirestoreValue.encodeFieldsREST(fields)]
         let bodyData = try JSONSerialization.data(withJSONObject: bodyObj)
-        let data = try await rawRequest(urlString: url, method: "POST", body: bodyData, token: token)
+        let data = try await rawRequest(
+            urlString: url,
+            method: "POST",
+            body: bodyData,
+            extraHeaders: ["x-goog-user-project": projectId],
+            token: token
+        )
         return try FirebaseParser.decodeFirestoreDocument(from: data)
     }
 
@@ -599,21 +709,27 @@ extension GCPAPIClient {
         databaseId: String = "(default)",
         documentPath: String,
         fields: [String: FirestoreValue],
+        merge: Bool = false,
         token: String
     ) async throws -> FirestoreDocument {
         let db = databaseId.isEmpty ? "(default)" : databaseId
         let cleanDoc = documentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         var url = "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/\(db)/documents/\(FirebaseParser.encodePathSegments(cleanDoc))"
-        if !fields.isEmpty {
+        if merge && !fields.isEmpty {
             let maskParams = fields.keys.sorted().map { key in
-                let encoded = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key
-                return "updateMask.fieldPaths=\(encoded)"
+                "updateMask.fieldPaths=\(FirebaseParser.encodeQueryValue(key))"
             }.joined(separator: "&")
             url += "?\(maskParams)"
         }
         let bodyObj: [String: Any] = ["fields": FirestoreValue.encodeFieldsREST(fields)]
         let bodyData = try JSONSerialization.data(withJSONObject: bodyObj)
-        let data = try await rawRequest(urlString: url, method: "PATCH", body: bodyData, token: token)
+        let data = try await rawRequest(
+            urlString: url,
+            method: "PATCH",
+            body: bodyData,
+            extraHeaders: ["x-goog-user-project": projectId],
+            token: token
+        )
         return try FirebaseParser.decodeFirestoreDocument(from: data)
     }
 
@@ -626,7 +742,12 @@ extension GCPAPIClient {
         let db = databaseId.isEmpty ? "(default)" : databaseId
         let cleanDoc = documentPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         let url = "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/\(db)/documents/\(FirebaseParser.encodePathSegments(cleanDoc))"
-        _ = try await rawRequest(urlString: url, method: "DELETE", token: token)
+        _ = try await rawRequest(
+            urlString: url,
+            method: "DELETE",
+            extraHeaders: ["x-goog-user-project": projectId],
+            token: token
+        )
     }
 
     func runFirestoreQuery(
@@ -657,7 +778,13 @@ extension GCPAPIClient {
             descending: descending,
             limit: limit
         )
-        let data = try await rawRequest(urlString: urlString, method: "POST", body: bodyData, token: token)
+        let data = try await rawRequest(
+            urlString: urlString,
+            method: "POST",
+            body: bodyData,
+            extraHeaders: ["x-goog-user-project": projectId],
+            token: token
+        )
         return try FirebaseParser.decodeFirestoreRunQuery(from: data)
     }
 
@@ -668,7 +795,11 @@ extension GCPAPIClient {
     ) async throws -> [FirestoreIndex] {
         let db = databaseId.isEmpty ? "(default)" : databaseId
         let url = "https://firestore.googleapis.com/v1/projects/\(projectId)/databases/\(db)/collectionGroups/-/indexes?pageSize=100"
-        let data = try await rawRequest(urlString: url, token: token)
+        let data = try await rawRequest(
+            urlString: url,
+            extraHeaders: ["x-goog-user-project": projectId],
+            token: token
+        )
         return try FirebaseParser.decodeFirestoreIndexes(from: data)
     }
 
@@ -677,15 +808,17 @@ extension GCPAPIClient {
     func getFirebaseProject(projectId: String, token: String) async throws -> FirebaseProjectInfo {
         let data = try await rawRequest(
             urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeFirebaseProject(from: data)
     }
 
     func listFirebaseApps(projectId: String, token: String) async throws -> [FirebaseAppItem] {
-        async let webData = try? rawRequest(urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)/webApps?pageSize=100", token: token)
-        async let iosData = try? rawRequest(urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)/iosApps?pageSize=100", token: token)
-        async let androidData = try? rawRequest(urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)/androidApps?pageSize=100", token: token)
+        let headers = ["x-goog-user-project": projectId]
+        async let webData = try? rawRequest(urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)/webApps?pageSize=100", extraHeaders: headers, token: token)
+        async let iosData = try? rawRequest(urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)/iosApps?pageSize=100", extraHeaders: headers, token: token)
+        async let androidData = try? rawRequest(urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)/androidApps?pageSize=100", extraHeaders: headers, token: token)
 
         var apps: [FirebaseAppItem] = []
         if let d = await webData, let parsed = try? FirebaseParser.decodeFirebaseApps(from: d, platform: .web) {
@@ -709,6 +842,7 @@ extension GCPAPIClient {
         }
         let data = try await rawRequest(
             urlString: "https://firebase.googleapis.com/v1beta1/projects/\(projectId)/\(segment)/\(app.appId)/config",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeFirebaseAppConfig(from: data, app: app)
@@ -803,6 +937,7 @@ extension GCPAPIClient {
     func listFirebaseHostingSites(projectId: String, token: String) async throws -> [FirebaseHostingSite] {
         let data = try await rawRequest(
             urlString: "https://firebasehosting.googleapis.com/v1beta1/projects/\(projectId)/sites",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeHostingSites(from: data)
@@ -811,6 +946,7 @@ extension GCPAPIClient {
     func listFirebaseHostingReleases(projectId: String, siteId: String, token: String) async throws -> [FirebaseHostingRelease] {
         let data = try await rawRequest(
             urlString: "https://firebasehosting.googleapis.com/v1beta1/projects/\(projectId)/sites/\(siteId)/releases?pageSize=20",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeHostingReleases(from: data)
@@ -819,6 +955,7 @@ extension GCPAPIClient {
     func listFirebaseHostingChannels(projectId: String, siteId: String, token: String) async throws -> [FirebaseHostingChannel] {
         let data = try await rawRequest(
             urlString: "https://firebasehosting.googleapis.com/v1beta1/projects/\(projectId)/sites/\(siteId)/channels?pageSize=20",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeHostingChannels(from: data)
@@ -829,6 +966,7 @@ extension GCPAPIClient {
     func listFirebaseRulesReleases(projectId: String, token: String) async throws -> [FirebaseRulesRelease] {
         let data = try await rawRequest(
             urlString: "https://firebaserules.googleapis.com/v1/projects/\(projectId)/releases?pageSize=25",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeRulesReleases(from: data)
@@ -836,8 +974,16 @@ extension GCPAPIClient {
 
     func getFirebaseRuleset(rulesetName: String, token: String) async throws -> FirebaseRuleset {
         let clean = rulesetName.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let parts = clean.split(separator: "/").map(String.init)
+        let extraHeaders: [String: String]
+        if let idx = parts.firstIndex(of: "projects"), idx + 1 < parts.count {
+            extraHeaders = ["x-goog-user-project": parts[idx + 1]]
+        } else {
+            extraHeaders = [:]
+        }
         let data = try await rawRequest(
             urlString: "https://firebaserules.googleapis.com/v1/\(clean)",
+            extraHeaders: extraHeaders,
             token: token
         )
         return try FirebaseParser.decodeRuleset(from: data)
@@ -848,6 +994,7 @@ extension GCPAPIClient {
     func getFirebaseRemoteConfig(projectId: String, token: String) async throws -> FirebaseRemoteConfigTemplate {
         let (data, http) = try await rawRequestWithHeaders(
             urlString: "https://firebaseremoteconfig.googleapis.com/v1/projects/\(projectId)/remoteConfig",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         let etag = http.value(forHTTPHeaderField: "ETag") ?? "*"
@@ -860,11 +1007,15 @@ extension GCPAPIClient {
         etag: String,
         token: String
     ) async throws -> FirebaseRemoteConfigTemplate {
+        let sanitizedBody = try FirebaseParser.sanitizeRemoteConfigForPublish(rawJSON)
         let (data, http) = try await rawRequestWithHeaders(
             urlString: "https://firebaseremoteconfig.googleapis.com/v1/projects/\(projectId)/remoteConfig",
             method: "PUT",
-            body: Data(rawJSON.utf8),
-            extraHeaders: ["If-Match": etag.isEmpty ? "*" : etag],
+            body: sanitizedBody,
+            extraHeaders: [
+                "If-Match": etag.isEmpty ? "*" : etag,
+                "x-goog-user-project": projectId
+            ],
             token: token
         )
         let nextEtag = http.value(forHTTPHeaderField: "ETag") ?? etag
@@ -874,6 +1025,7 @@ extension GCPAPIClient {
     func listFirebaseRemoteConfigVersions(projectId: String, token: String) async throws -> [FirebaseRemoteConfigVersion] {
         let data = try await rawRequest(
             urlString: "https://firebaseremoteconfig.googleapis.com/v1/projects/\(projectId)/remoteConfig:listVersions?pageSize=20",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeRemoteConfigVersions(from: data)
@@ -884,6 +1036,7 @@ extension GCPAPIClient {
     func listRealtimeDBInstances(projectId: String, token: String) async throws -> [RealtimeDBInstance] {
         let data = try await rawRequest(
             urlString: "https://firebasedatabase.googleapis.com/v1beta/projects/\(projectId)/locations/-/instances",
+            extraHeaders: ["x-goog-user-project": projectId],
             token: token
         )
         return try FirebaseParser.decodeRealtimeDBInstances(from: data)

@@ -22,6 +22,8 @@ enum DeepLinkParser {
                 section = .networkAndCI
             } else if lower == "pubsub" || lower == "firestore" || lower == "spanner" || lower == "redis" {
                 section = .dataServices
+            } else if lower == "firebase" || lower == "auth" || lower == "hosting" || lower == "rules" || lower == "remoteconfig" || lower == "rtdb" {
+                section = .firebase
             } else if lower == "metrics" {
                 section = .monitoring
             } else {

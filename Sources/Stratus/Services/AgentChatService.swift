@@ -163,14 +163,18 @@ final class AgentChatStore {
             inspectorSummary = "none"
         }
 
+        let firestoreContext = appState.selectedFirestoreCollectionPath.isEmpty
+            ? "\(appState.firestoreDatabases.count) Firestore DBs"
+            : "Firestore DB '\(appState.selectedFirestoreDatabaseId)' col '\(appState.selectedFirestoreCollectionPath)' (\(appState.firestoreDocuments.count) docs loaded)"
+
         return """
         You are running inside the Stratus macOS Google Cloud Console app.
         Active GCP Project: \(projectLabel)
         Auth Mode: \(modeLabel)
         Active Section: \(appState.selectedSection.title)
         Inspected Resource: \(inspectorSummary)
-        Loaded Counts: \(appState.instances.count) VMs, \(appState.cloudRunServices.count) Cloud Run services, \(appState.buckets.count) GCS buckets, \(appState.sqlInstances.count) SQL instances, \(appState.secrets.count) secrets, \(appState.logEntries.count) log entries.
-        You can use the `stratus_*` MCP tools or `~/.local/bin/stratus` CLI (add `--demo` if Auth Mode is Demo Mode) to inspect or operate Google Cloud resources on the user's behalf. Keep responses concise and well-structured.
+        Loaded Counts: \(appState.instances.count) VMs, \(appState.cloudRunServices.count) Cloud Run services, \(appState.buckets.count) GCS buckets, \(appState.sqlInstances.count) SQL instances, \(appState.secrets.count) secrets, \(appState.logEntries.count) log entries, \(appState.firebaseApps.count) Firebase apps, \(appState.firebaseAuthUsers.count) Auth users, \(appState.firebaseHostingSites.count) Hosting sites, \(firestoreContext).
+        You can use the `stratus_*` MCP tools (including `stratus_firebase` and `stratus_firestore`) or `~/.local/bin/stratus` CLI (add `--demo` if Auth Mode is Demo Mode) to inspect or operate Google Cloud & Firebase resources on the user's behalf. Keep responses concise and well-structured.
         """
     }
 

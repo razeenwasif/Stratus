@@ -138,6 +138,7 @@ final class AppState {
     var firestoreCollections: [String] = []
     var selectedFirestoreCollectionPath: String = ""
     var firestoreDocuments: [FirestoreDocument] = []
+    var firestoreNextPageToken: String?
     var selectedFirestoreDocument: FirestoreDocument?
     var firestoreDocSubcollections: [String] = []
     var firestoreIndexes: [FirestoreIndex] = []
@@ -280,6 +281,7 @@ final class AppState {
         firestoreCollections = []
         selectedFirestoreCollectionPath = ""
         firestoreDocuments = []
+        firestoreNextPageToken = nil
         selectedFirestoreDocument = nil
         firestoreDocSubcollections = []
         firestoreIndexes = []
