@@ -33,32 +33,38 @@ struct ComputeView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
             header
-            statsStrip
 
-            if appState.isLoadingCompute && appState.instances.isEmpty {
-                ProgressView("Loading VM instances...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let err = appState.computeError, appState.instances.isEmpty {
-                EmptyStateView(icon: "cpu", title: "Compute Engine unavailable", message: err, actionTitle: "Retry") {
-                    Task { await appState.refreshCompute() }
-                }
-            } else if filteredInstances.isEmpty {
-                EmptyStateView(
-                    icon: "server.rack",
-                    title: "No VM instances match",
-                    message: appState.instances.isEmpty
-                        ? "This project has no Compute Engine virtual machines."
-                        : "Clear the active search or status filter."
-                )
-            } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    LazyVStack(alignment: .leading, spacing: 6) {
-                        ForEach(filteredInstances) { vm in
-                            vmRow(vm)
-                        }
+            switch appState.selectedComputeTab {
+            case .vms:
+                statsStrip
+
+                if appState.isLoadingCompute && appState.instances.isEmpty {
+                    ProgressView("Loading VM instances...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let err = appState.computeError, appState.instances.isEmpty {
+                    EmptyStateView(icon: "cpu", title: "Compute Engine unavailable", message: err, actionTitle: "Retry") {
+                        Task { await appState.refreshCompute() }
                     }
-                    .padding(.bottom, 32)
+                } else if filteredInstances.isEmpty {
+                    EmptyStateView(
+                        icon: "server.rack",
+                        title: "No VM instances match",
+                        message: appState.instances.isEmpty
+                            ? "This project has no Compute Engine virtual machines."
+                            : "Clear the active search or status filter."
+                    )
+                } else {
+                    ScrollView(.vertical, showsIndicators: false) {
+                        LazyVStack(alignment: .leading, spacing: 6) {
+                            ForEach(filteredInstances) { vm in
+                                vmRow(vm)
+                            }
+                        }
+                        .padding(.bottom, 32)
+                    }
                 }
+            case .gke:
+                gkeContent
             }
         }
         .padding(.horizontal, 36)
@@ -69,28 +75,114 @@ struct ComputeView: View {
     private var header: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 3) {
-                Text("Compute Engine")
+                Text("Compute & GKE")
                     .font(T3.pageTitle())
                     .foregroundStyle(T3.textPrimary)
-                Text("\(appState.instances.count) virtual machines · \(appState.selectedProject?.projectId ?? "")")
-                    .font(.system(size: 12))
-                    .foregroundStyle(T3.textMuted)
+                Text(
+                    appState.selectedComputeTab == .vms
+                        ? "\(appState.instances.count) virtual machines · \(appState.selectedProject?.projectId ?? "")"
+                        : "\(appState.gkeClusters.count) Kubernetes clusters · \(appState.selectedProject?.projectId ?? "")"
+                )
+                .font(.system(size: 12))
+                .foregroundStyle(T3.textMuted)
             }
 
             Spacer()
 
             HStack(spacing: 4) {
-                ForEach(VMStatusFilter.allCases, id: \.self) { filter in
-                    FilterPillButton(title: filter.rawValue, isSelected: statusFilter == filter) {
-                        statusFilter = filter
+                ForEach(ComputeSubTab.allCases) { tab in
+                    FilterPillButton(title: tab.title, isSelected: appState.selectedComputeTab == tab) {
+                        appState.selectedComputeTab = tab
+                        Task { await appState.refreshComputeSection() }
                     }
                 }
             }
 
-            BorderlessSearchField(text: $searchText, placeholder: "Filter VMs, zones, IPs...", width: 220)
+            if appState.selectedComputeTab == .vms {
+                HStack(spacing: 4) {
+                    ForEach(VMStatusFilter.allCases, id: \.self) { filter in
+                        FilterPillButton(title: filter.rawValue, isSelected: statusFilter == filter) {
+                            statusFilter = filter
+                        }
+                    }
+                }
+            }
 
-            ActionPillButton(title: "Refresh", systemImage: "arrow.clockwise", isLoading: appState.isLoadingCompute) {
-                Task { await appState.refreshCompute() }
+            BorderlessSearchField(text: $searchText, placeholder: appState.selectedComputeTab == .vms ? "Filter VMs, zones, IPs..." : "Filter GKE clusters...", width: 200)
+
+            ActionPillButton(title: "Refresh", systemImage: "arrow.clockwise", isLoading: appState.isLoadingCompute || appState.isLoadingGKE) {
+                Task { await appState.refreshComputeSection() }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var gkeContent: some View {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let clusters = appState.gkeClusters.filter {
+            q.isEmpty || $0.name.lowercased().contains(q) || $0.location.lowercased().contains(q)
+        }
+        if appState.isLoadingGKE && appState.gkeClusters.isEmpty {
+            ProgressView("Loading GKE clusters...")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let err = appState.gkeError, appState.gkeClusters.isEmpty {
+            EmptyStateView(icon: "cube.transparent", title: "GKE unavailable", message: err, actionTitle: "Retry") {
+                Task { await appState.refreshGKE() }
+            }
+        } else if clusters.isEmpty {
+            EmptyStateView(icon: "cube.transparent", title: "No GKE clusters", message: "No Kubernetes clusters found in this project.")
+        } else {
+            ScrollView(.vertical, showsIndicators: false) {
+                LazyVStack(alignment: .leading, spacing: 6) {
+                    ForEach(clusters) { cluster in
+                        let isHovered = hoveredId == cluster.id
+                        HStack(spacing: 14) {
+                            StatusDot(color: cluster.isRunning ? T3.mint : T3.amber, size: 6, pulse: cluster.isRunning)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack(spacing: 8) {
+                                    Text(cluster.name)
+                                        .font(.system(size: 13.5, weight: .semibold))
+                                        .foregroundStyle(T3.textPrimary)
+                                    TagPill(text: cluster.location, monospaced: true)
+                                    TagPill(text: "v\(cluster.masterVersion)", color: T3.indigo, monospaced: true)
+                                    TagPill(text: "\(cluster.nodeCount) nodes", monospaced: true)
+                                }
+                                HStack(spacing: 10) {
+                                    Text("network: \(cluster.network)")
+                                        .font(T3.mono(11))
+                                        .foregroundStyle(T3.textTertiary)
+                                    if !cluster.endpoint.isEmpty {
+                                        Text(cluster.endpoint)
+                                            .font(T3.mono(11))
+                                            .foregroundStyle(T3.sky)
+                                    }
+                                }
+                            }
+
+                            Spacer()
+
+                            if isHovered {
+                                ActionPillButton(title: "kubectl auth", systemImage: "terminal", tint: T3.sky) {
+                                    let pid = appState.selectedProject?.projectId ?? ""
+                                    appState.copyToClipboard(cluster.getCredentialsCommand(projectId: pid), label: "get-credentials command")
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                        .background(
+                            isHovered ? T3.surfaceHover : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        )
+                        .contentShape(Rectangle())
+                        .onHover { hoveredId = $0 ? cluster.id : nil }
+                        .onTapGesture {
+                            appState.inspector = .gke(cluster)
+                        }
+                    }
+                }
+                .padding(.bottom, 32)
             }
         }
     }

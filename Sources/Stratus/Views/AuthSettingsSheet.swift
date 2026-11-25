@@ -67,6 +67,31 @@ struct AuthSettingsSheet: View {
                     .foregroundStyle(T3.rose)
             }
 
+            // Optional BigQuery Billing Export Table for exact invoice spend in Overview
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("BIGQUERY BILLING EXPORT TABLE (OPTIONAL · EXACT INVOICE SPEND)")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(T3.textTertiary)
+                    Spacer()
+                    Button("Save") {
+                        appState.auth.saveOAuthAndBillingConfig(clientId: clientIdText, billingTable: billingTableText)
+                        appState.showToast("Saved billing export table")
+                        Task { await appState.refreshOverview() }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(T3.sky)
+                }
+
+                TextField("", text: $billingTableText, prompt: Text("my-billing-project.billing_export.gcp_billing_export_v1_XXXXXX").foregroundStyle(T3.textTertiary))
+                    .textFieldStyle(.plain)
+                    .font(T3.mono(11.5))
+                    .foregroundStyle(T3.textPrimary)
+                    .padding(10)
+                    .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
+            }
+
             HStack {
                 StatusDot(color: appState.auth.isDemo ? T3.indigo : T3.mint, size: 6)
                 Text("Active: \(appState.auth.mode.displayName) (\(appState.auth.account.email))")

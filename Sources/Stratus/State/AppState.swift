@@ -12,7 +12,11 @@ final class AppState {
 
     // Navigation & Chrome
     var selectedSection: NavSection = .overview
+    var selectedComputeTab: ComputeSubTab = .vms
+    var selectedServerlessTab: ServerlessSubTab = .cloudRun
+    var selectedNetworkCITab: NetworkCISubTab = .vpc
     var selectedDataTab: DataSubTab = .bigQuery
+    var selectedSecurityTab: SecuritySubTab = .iam
     var sidebarCollapsed = false
     var showCommandPalette = false
     var showAuthSheet = false
@@ -96,6 +100,55 @@ final class AppState {
     var isLoadingSecrets = false
     var secretsError: String?
 
+    // Extended GCP Services (GKE, Functions, VPC/Firewalls, Artifacts, Build/Scheduler, Pub/Sub, Firestore, Spanner, Redis, Monitoring)
+    var gkeClusters: [GKECluster] = []
+    var isLoadingGKE = false
+    var gkeError: String?
+
+    var cloudFunctions: [CloudFunctionItem] = []
+    var isLoadingFunctions = false
+    var functionsError: String?
+
+    var vpcNetworks: [VPCNetwork] = []
+    var firewallRules: [FirewallRule] = []
+    var isLoadingNetwork = false
+    var networkError: String?
+
+    var artifactRepos: [ArtifactRepo] = []
+    var artifactImages: [ArtifactImage] = []
+    var isLoadingArtifacts = false
+    var isLoadingArtifactImages = false
+    var artifactsError: String?
+
+    var cloudBuilds: [CloudBuildItem] = []
+    var schedulerJobs: [SchedulerJob] = []
+    var isLoadingBuilds = false
+    var busySchedulerJobs: Set<String> = []
+    var buildsError: String?
+
+    var pubSubTopics: [PubSubTopic] = []
+    var pubSubSubscriptions: [PubSubSubscription] = []
+    var isLoadingPubSub = false
+    var pubSubError: String?
+
+    var firestoreDatabases: [FirestoreDatabase] = []
+    var isLoadingFirestore = false
+    var firestoreError: String?
+
+    var spannerInstances: [SpannerInstance] = []
+    var isLoadingSpanner = false
+    var spannerError: String?
+
+    var redisInstances: [RedisInstance] = []
+    var isLoadingRedis = false
+    var redisError: String?
+
+    var selectedMetricKind: MonitoringMetricKind = .computeCPU
+    var monitoringHours: Int = 24
+    var monitoringPoints: [MonitoringPoint] = []
+    var isLoadingMonitoring = false
+    var monitoringError: String?
+
     private var hasBootstrapped = false
 
     func bootstrap() async {
@@ -159,6 +212,20 @@ final class AppState {
         lastQueryResult = nil
         revealedSecretValue = nil
         revealedSecretVersionId = nil
+        gkeClusters = []
+        cloudFunctions = []
+        vpcNetworks = []
+        firewallRules = []
+        artifactRepos = []
+        artifactImages = []
+        cloudBuilds = []
+        schedulerJobs = []
+        pubSubTopics = []
+        pubSubSubscriptions = []
+        firestoreDatabases = []
+        spannerInstances = []
+        redisInstances = []
+        monitoringPoints = []
         await refreshCurrentSection()
     }
 
@@ -186,29 +253,35 @@ final class AppState {
         case .overview:
             if costOverview == nil { await refreshOverview() }
         case .compute:
-            if instances.isEmpty { await refreshCompute() }
-        case .cloudRun:
-            if cloudRunServices.isEmpty { await refreshCloudRun() }
+            await refreshComputeSection()
+        case .serverless:
+            await refreshServerlessSection()
+        case .networkAndCI:
+            await refreshNetworkCISection()
         case .storage:
             if buckets.isEmpty { await refreshBuckets() }
+        case .dataServices:
+            await refreshDataServices()
+        case .monitoring:
+            if monitoringPoints.isEmpty { await refreshMonitoring() }
         case .logging:
             if logEntries.isEmpty { await refreshLogs(filter: "") }
         case .iamAndApis:
-            if iamBindings.isEmpty && enabledAPIs.isEmpty { await refreshIAMAndAPIs() }
-        case .dataServices:
-            await refreshDataServices()
+            await refreshSecuritySection()
         }
     }
 
     func refreshCurrentSection() async {
         switch selectedSection {
         case .overview: await refreshOverview()
-        case .compute: await refreshCompute()
-        case .cloudRun: await refreshCloudRun()
+        case .compute: await refreshComputeSection()
+        case .serverless: await refreshServerlessSection()
+        case .networkAndCI: await refreshNetworkCISection()
         case .storage: await refreshBuckets()
-        case .logging: await refreshLogs(filter: "")
-        case .iamAndApis: await refreshIAMAndAPIs()
         case .dataServices: await refreshDataServices()
+        case .monitoring: await refreshMonitoring()
+        case .logging: await refreshLogs(filter: "")
+        case .iamAndApis: await refreshSecuritySection()
         }
     }
 
@@ -246,6 +319,24 @@ final class AppState {
             buckets = await bucketTask ?? []
             sqlInstances = await sqlTask ?? []
             datasets = await bqTask ?? []
+
+            let billingTable = auth.billingExportTable.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !billingTable.isEmpty {
+                let sql = CostEstimator.billingExportSQL(table: billingTable, projectId: projectId)
+                if let queryRes = try? await api.runBigQuerySQL(projectId: projectId, sql: sql, token: token),
+                   let exactOverview = CostEstimator.buildFromBillingExport(
+                    projectId: projectId,
+                    table: billingTable,
+                    queryResult: queryRes,
+                    instances: instances,
+                    cloudRun: cloudRunServices,
+                    buckets: buckets,
+                    sqlInstances: sqlInstances
+                   ) {
+                    costOverview = exactOverview
+                    return
+                }
+            }
 
             costOverview = CostEstimator.buildOverview(
                 projectId: projectId,
@@ -611,13 +702,16 @@ final class AppState {
         }
     }
 
-    // MARK: - Data & Secrets
+    // MARK: - Data & Messaging
 
     func refreshDataServices() async {
         switch selectedDataTab {
         case .bigQuery: await refreshBigQuery()
         case .cloudSQL: await refreshCloudSQL()
-        case .secretManager: await refreshSecrets()
+        case .firestore: await refreshFirestore()
+        case .spanner: await refreshSpanner()
+        case .redis: await refreshRedis()
+        case .pubSub: await refreshPubSub()
         }
     }
 

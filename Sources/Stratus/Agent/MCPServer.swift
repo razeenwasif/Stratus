@@ -170,6 +170,24 @@ final class MCPServer {
                     revealVersion: stringArg("revealVersion", in: args),
                     demo: demo
                 )
+            case "stratus_list_gke":
+                payload = try await bridge.listGKE(projectId: projectId, demo: demo)
+            case "stratus_list_functions":
+                payload = try await bridge.listFunctions(projectId: projectId, demo: demo)
+            case "stratus_list_network":
+                payload = try await bridge.listNetwork(projectId: projectId, demo: demo)
+            case "stratus_list_artifacts":
+                payload = try await bridge.listArtifacts(projectId: projectId, repoFullName: stringArg("repoFullName", in: args), demo: demo)
+            case "stratus_builds":
+                payload = try await bridge.listBuilds(projectId: projectId, demo: demo)
+            case "stratus_scheduler":
+                payload = try await bridge.scheduler(projectId: projectId, runJobFullName: stringArg("runJobFullName", in: args), demo: demo)
+            case "stratus_pubsub":
+                payload = try await bridge.pubsub(projectId: projectId, publishTopic: stringArg("publishTopic", in: args), message: stringArg("message", in: args), demo: demo)
+            case "stratus_databases":
+                payload = try await bridge.databases(projectId: projectId, kind: stringArg("kind", in: args) ?? "all", demo: demo)
+            case "stratus_monitoring":
+                payload = try await bridge.monitoring(projectId: projectId, metricRaw: stringArg("metric", in: args) ?? "computeCPU", hours: intArg("hours", in: args) ?? 24, demo: demo)
             case "stratus_open_ui":
                 payload = try await bridge.openUI(
                     section: stringArg("section", in: args),
@@ -361,11 +379,57 @@ final class MCPServer {
                 "revealVersion": .object(["type": .string("string"), "description": .string("Version number or 'latest' to reveal")])
             ]
         ),
+        schema("stratus_list_gke", description: "List GKE Kubernetes clusters and node counts.", properties: ["projectId": projectIdProp]),
+        schema("stratus_list_functions", description: "List Cloud Functions v2 services, runtimes, and triggers.", properties: ["projectId": projectIdProp]),
+        schema("stratus_list_network", description: "List VPC networks and firewall rules.", properties: ["projectId": projectIdProp]),
+        schema(
+            "stratus_list_artifacts",
+            description: "List Artifact Registry repositories or Docker images inside a repository.",
+            properties: [
+                "projectId": projectIdProp,
+                "repoFullName": .object(["type": .string("string"), "description": .string("Optional repository full resource name")])
+            ]
+        ),
+        schema("stratus_builds", description: "List recent Cloud Build runs and status.", properties: ["projectId": projectIdProp]),
+        schema(
+            "stratus_scheduler",
+            description: "List Cloud Scheduler cron jobs or trigger a job immediately.",
+            properties: [
+                "projectId": projectIdProp,
+                "runJobFullName": .object(["type": .string("string"), "description": .string("Optional job full resource name to trigger")])
+            ]
+        ),
+        schema(
+            "stratus_pubsub",
+            description: "List Pub/Sub topics and subscriptions, or publish a message to a topic.",
+            properties: [
+                "projectId": projectIdProp,
+                "publishTopic": .object(["type": .string("string"), "description": .string("Optional topic name to publish to")]),
+                "message": .object(["type": .string("string"), "description": .string("Message payload when publishTopic is provided")])
+            ]
+        ),
+        schema(
+            "stratus_databases",
+            description: "List Firestore databases/collections, Cloud Spanner instances, and Memorystore Redis instances.",
+            properties: [
+                "projectId": projectIdProp,
+                "kind": .object(["type": .string("string"), "enum": .array(["all", "firestore", "spanner", "redis"].map(AnyCodableValue.string))])
+            ]
+        ),
+        schema(
+            "stratus_monitoring",
+            description: "Query Cloud Monitoring time-series metrics (Compute CPU, Cloud Run Requests, Cloud SQL CPU/Memory).",
+            properties: [
+                "projectId": projectIdProp,
+                "metric": .object(["type": .string("string"), "enum": .array(["computeCPU", "cloudRunRequests", "sqlCPU", "sqlMemory"].map(AnyCodableValue.string))]),
+                "hours": .object(["type": .string("integer"), "description": .string("Timeframe in hours (1, 6, or 24)")])
+            ]
+        ),
         schema(
             "stratus_open_ui",
             description: "Open or focus the Stratus macOS app window to a specific project and section.",
             properties: [
-                "section": .object(["type": .string("string"), "enum": .array(["overview", "compute", "cloudRun", "storage", "dataServices", "logging", "iamAndApis"].map(AnyCodableValue.string))]),
+                "section": .object(["type": .string("string"), "enum": .array(["overview", "compute", "serverless", "networkAndCI", "storage", "dataServices", "monitoring", "logging", "iamAndApis"].map(AnyCodableValue.string))]),
                 "projectId": projectIdProp
             ]
         )

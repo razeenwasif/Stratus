@@ -429,7 +429,7 @@ enum DemoDataProvider {
         let items: [(String, String, Int, String, Double, String, NavSection)] = [
             ("Compute Engine", "cpu", instances(for: projectId).count, "\(instances(for: projectId).count) VMs", vmCost, "\(instances(for: projectId).filter(\.isRunning).count) running", .compute),
             ("Cloud SQL", "cylinder.split.1x2", 2, "2 instances", sqlCost, "Postgres 16 HA", .dataServices),
-            ("Cloud Run", "bolt.horizontal.fill", 4, "4 services", runCost, "2.29M req/24h", .cloudRun),
+            ("Cloud Run", "bolt.horizontal.fill", 4, "4 services", runCost, "2.29M req/24h", .serverless),
             ("Cloud Storage", "externaldrive", 4, "4 buckets", gcsCost, "1.61 TiB stored", .storage),
             ("BigQuery", "tablecells", 3, "3 datasets", bqCost, "48.2 MB scanned", .dataServices)
         ]
@@ -506,7 +506,7 @@ enum DemoDataProvider {
         let topResources: [TopResourceItem] = [
             TopResourceItem(id: "tr-1", name: instances(for: projectId).first?.name ?? "api-gateway-edge-01", category: "Compute", meta: instances(for: projectId).first?.zone ?? "us-central1-a", metricText: "4 vCPU · 64 GB", cost: vmCost * 0.64, targetSection: .compute),
             TopResourceItem(id: "tr-2", name: "orders-pg-primary", category: "Cloud SQL", meta: "POSTGRES_16 · HA", metricText: "250 GB", cost: 142.80, targetSection: .dataServices),
-            TopResourceItem(id: "tr-3", name: "checkout-api", category: "Cloud Run", meta: "us-central1 · 90/10 split", metricText: "1.24M req", cost: 64.80, targetSection: .cloudRun),
+            TopResourceItem(id: "tr-3", name: "checkout-api", category: "Cloud Run", meta: "us-central1 · 90/10 split", metricText: "1.24M req", cost: 64.80, targetSection: .serverless),
             TopResourceItem(id: "tr-4", name: "redis-sentinel-primary", category: "Compute", meta: "us-central1-b · e2-highmem-2", metricText: "2 vCPU", cost: 66.20, targetSection: .compute)
         ]
 

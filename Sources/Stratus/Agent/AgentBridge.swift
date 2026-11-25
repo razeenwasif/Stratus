@@ -13,9 +13,22 @@ enum DeepLinkParser {
 
         let section: NavSection?
         if let sectionRaw {
-            section = NavSection.allCases.first {
-                $0.rawValue.caseInsensitiveCompare(sectionRaw) == .orderedSame
-                    || $0.shortTitle.caseInsensitiveCompare(sectionRaw) == .orderedSame
+            let lower = sectionRaw.lowercased()
+            if lower == "cloudrun" || lower == "functions" {
+                section = .serverless
+            } else if lower == "gke" {
+                section = .compute
+            } else if lower == "network" || lower == "vpc" || lower == "builds" || lower == "artifacts" {
+                section = .networkAndCI
+            } else if lower == "pubsub" || lower == "firestore" || lower == "spanner" || lower == "redis" {
+                section = .dataServices
+            } else if lower == "metrics" {
+                section = .monitoring
+            } else {
+                section = NavSection.allCases.first {
+                    $0.rawValue.caseInsensitiveCompare(sectionRaw) == .orderedSame
+                        || $0.shortTitle.caseInsensitiveCompare(sectionRaw) == .orderedSame
+                }
             }
         } else {
             section = nil

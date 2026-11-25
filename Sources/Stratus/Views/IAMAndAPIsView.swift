@@ -2,15 +2,9 @@ import SwiftUI
 
 struct IAMAndAPIsView: View {
     @Environment(AppState.self) private var appState
-    @State private var activeTab: SubTab = .iam
     @State private var searchText = ""
     @State private var newAPIName = ""
     @State private var hoveredRow: String?
-
-    enum SubTab: String, CaseIterable {
-        case iam = "IAM Principals"
-        case apis = "Enabled APIs"
-    }
 
     private var filteredBindings: [IAMBinding] {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -32,10 +26,10 @@ struct IAMAndAPIsView: View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("IAM & APIs")
+                    Text("Security & IAM")
                         .font(T3.pageTitle())
                         .foregroundStyle(T3.textPrimary)
-                    Text("\(appState.selectedProject?.projectId ?? "") · Access control & Service Usage")
+                    Text("\(appState.selectedProject?.projectId ?? "") · IAM Policy, Service Usage & Secret Manager")
                         .font(.system(size: 12))
                         .foregroundStyle(T3.textMuted)
                 }
@@ -43,38 +37,50 @@ struct IAMAndAPIsView: View {
                 Spacer()
 
                 HStack(spacing: 4) {
-                    ForEach(SubTab.allCases, id: \.self) { tab in
-                        FilterPillButton(title: tab.rawValue, isSelected: activeTab == tab) {
-                            activeTab = tab
+                    ForEach(SecuritySubTab.allCases) { tab in
+                        FilterPillButton(title: tab.title, isSelected: appState.selectedSecurityTab == tab) {
+                            appState.selectedSecurityTab = tab
+                            Task { await appState.refreshSecuritySection() }
                         }
                     }
                 }
 
                 BorderlessSearchField(
                     text: $searchText,
-                    placeholder: activeTab == .iam ? "Filter roles or principals..." : "Filter APIs...",
-                    width: 220
+                    placeholder: appState.selectedSecurityTab == .iam ? "Filter roles or principals..." : (appState.selectedSecurityTab == .apis ? "Filter APIs..." : "Filter secrets..."),
+                    width: 210
                 )
 
-                ActionPillButton(title: "Refresh", systemImage: "arrow.clockwise", isLoading: appState.isLoadingIAM) {
-                    Task { await appState.refreshIAMAndAPIs() }
+                ActionPillButton(title: "Refresh", systemImage: "arrow.clockwise", isLoading: appState.isLoadingIAM || appState.isLoadingSecrets) {
+                    Task { await appState.refreshSecuritySection() }
                 }
             }
 
-            if appState.isLoadingIAM && appState.iamBindings.isEmpty && appState.enabledAPIs.isEmpty {
-                ProgressView("Loading IAM policy and enabled APIs...")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let err = appState.iamError, appState.iamBindings.isEmpty && appState.enabledAPIs.isEmpty {
-                EmptyStateView(icon: "lock.shield", title: "IAM & Service Usage unavailable", message: err, actionTitle: "Retry") {
-                    Task { await appState.refreshIAMAndAPIs() }
-                }
-            } else {
-                switch activeTab {
-                case .iam:
+            switch appState.selectedSecurityTab {
+            case .iam:
+                if appState.isLoadingIAM && appState.iamBindings.isEmpty {
+                    ProgressView("Loading IAM policy...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let err = appState.iamError, appState.iamBindings.isEmpty {
+                    EmptyStateView(icon: "lock.shield", title: "IAM unavailable", message: err, actionTitle: "Retry") {
+                        Task { await appState.refreshIAMAndAPIs() }
+                    }
+                } else {
                     iamListView
-                case .apis:
+                }
+            case .apis:
+                if appState.isLoadingIAM && appState.enabledAPIs.isEmpty {
+                    ProgressView("Loading enabled APIs...")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let err = appState.iamError, appState.enabledAPIs.isEmpty {
+                    EmptyStateView(icon: "lock.shield", title: "Service Usage unavailable", message: err, actionTitle: "Retry") {
+                        Task { await appState.refreshIAMAndAPIs() }
+                    }
+                } else {
                     apisListView
                 }
+            case .secrets:
+                secretManagerView
             }
         }
         .padding(.horizontal, 36)
@@ -196,6 +202,77 @@ struct IAMAndAPIsView: View {
                     }
                 }
                 .padding(.bottom, 32)
+            }
+        }
+    }
+
+    private var secretManagerView: some View {
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = appState.secrets.filter {
+            q.isEmpty || $0.shortName.lowercased().contains(q)
+        }
+        return Group {
+            if appState.isLoadingSecrets && appState.secrets.isEmpty {
+                ProgressView("Loading secrets...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let err = appState.secretsError, appState.secrets.isEmpty {
+                EmptyStateView(icon: "key.fill", title: "Secret Manager unavailable", message: err, actionTitle: "Retry") {
+                    Task { await appState.refreshSecrets() }
+                }
+            } else if filtered.isEmpty {
+                EmptyStateView(icon: "key", title: "No secrets stored", message: "Create secrets in Secret Manager to inspect versions and payloads.")
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 6) {
+                        ForEach(filtered) { secret in
+                            let isHovered = hoveredRow == secret.id
+                            let isSelected: Bool = {
+                                if case .secret(let cur) = appState.inspector { return cur.id == secret.id }
+                                return false
+                            }()
+
+                            HStack(spacing: 12) {
+                                Image(systemName: "key.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(T3.amber)
+                                    .frame(width: 18)
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(secret.shortName)
+                                        .font(T3.mono(13, weight: .semibold))
+                                        .foregroundStyle(T3.textPrimary)
+
+                                    HStack(spacing: 8) {
+                                        TagPill(text: secret.replicationPolicy)
+                                        ForEach(secret.labels.keys.sorted(), id: \.self) { k in
+                                            TagPill(text: "\(k):\(secret.labels[k] ?? "")", monospaced: true)
+                                        }
+                                    }
+                                }
+
+                                Spacer()
+
+                                if let created = secret.createTime {
+                                    Text(Formatters.relativeDate(created))
+                                        .font(T3.mono(11))
+                                        .foregroundStyle(T3.textTertiary)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                isSelected ? T3.surfaceActive : (isHovered ? T3.surfaceHover : Color.clear),
+                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            )
+                            .contentShape(Rectangle())
+                            .onHover { hoveredRow = $0 ? secret.id : nil }
+                            .onTapGesture {
+                                Task { await appState.inspectSecret(secret) }
+                            }
+                        }
+                    }
+                    .padding(.bottom, 32)
+                }
             }
         }
     }

@@ -147,9 +147,11 @@ struct EnabledAPI: Identifiable, Sendable, Hashable {
 enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
     case overview
     case compute
-    case cloudRun
+    case serverless
+    case networkAndCI
     case storage
     case dataServices
+    case monitoring
     case logging
     case iamAndApis
 
@@ -158,24 +160,28 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
     var title: String {
         switch self {
         case .overview: return "Overview"
-        case .compute: return "Compute Engine"
-        case .cloudRun: return "Cloud Run"
+        case .compute: return "Compute & GKE"
+        case .serverless: return "Serverless"
+        case .networkAndCI: return "Network & CI"
         case .storage: return "Cloud Storage"
-        case .dataServices: return "Data & Secrets"
+        case .dataServices: return "Data & Messaging"
+        case .monitoring: return "Monitoring"
         case .logging: return "Cloud Logging"
-        case .iamAndApis: return "IAM & APIs"
+        case .iamAndApis: return "Security & IAM"
         }
     }
 
     var shortTitle: String {
         switch self {
         case .overview: return "Overview"
-        case .compute: return "Compute"
-        case .cloudRun: return "Cloud Run"
+        case .compute: return "Compute & GKE"
+        case .serverless: return "Serverless"
+        case .networkAndCI: return "Network & CI"
         case .storage: return "Storage"
-        case .dataServices: return "Data & Secrets"
+        case .dataServices: return "Data & Pub/Sub"
+        case .monitoring: return "Monitoring"
         case .logging: return "Logs"
-        case .iamAndApis: return "IAM & APIs"
+        case .iamAndApis: return "Security & IAM"
         }
     }
 
@@ -183,9 +189,11 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .overview: return "chart.xyaxis.line"
         case .compute: return "cpu"
-        case .cloudRun: return "bolt.horizontal.fill"
+        case .serverless: return "bolt.horizontal.fill"
+        case .networkAndCI: return "network"
         case .storage: return "externaldrive"
         case .dataServices: return "cylinder.split.1x2"
+        case .monitoring: return "waveform.path.ecg"
         case .logging: return "text.alignleft"
         case .iamAndApis: return "lock.shield"
         }
@@ -195,9 +203,11 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .overview: return "#E88255"
         case .compute: return "#E88255"
-        case .cloudRun: return "#7A89FF"
+        case .serverless: return "#7A89FF"
+        case .networkAndCI: return "#4BC3F7"
         case .storage: return "#4BC3F7"
         case .dataServices: return "#34D399"
+        case .monitoring: return "#E88255"
         case .logging: return "#FBBF24"
         case .iamAndApis: return "#A78BFA"
         }
@@ -207,27 +217,67 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .overview: return "1"
         case .compute: return "2"
-        case .cloudRun: return "3"
-        case .storage: return "4"
-        case .dataServices: return "5"
-        case .logging: return "6"
-        case .iamAndApis: return "7"
+        case .serverless: return "3"
+        case .networkAndCI: return "4"
+        case .storage: return "5"
+        case .dataServices: return "6"
+        case .monitoring: return "7"
+        case .logging: return "8"
+        case .iamAndApis: return "9"
         }
     }
 
     enum Group: String, CaseIterable {
         case monitor = "Monitor"
         case infrastructure = "Infrastructure"
-        case data = "Data & Security"
-        case operations = "Operations"
+        case data = "Data & Messaging"
+        case security = "Security"
     }
 
     var group: Group {
         switch self {
-        case .overview: return .monitor
-        case .compute, .cloudRun: return .infrastructure
+        case .overview, .monitoring, .logging: return .monitor
+        case .compute, .serverless, .networkAndCI: return .infrastructure
         case .storage, .dataServices: return .data
-        case .logging, .iamAndApis: return .operations
+        case .iamAndApis: return .security
+        }
+    }
+}
+
+enum ComputeSubTab: String, Sendable, CaseIterable, Identifiable, Hashable {
+    case vms
+    case gke
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .vms: return "Compute Engine"
+        case .gke: return "GKE Clusters"
+        }
+    }
+}
+
+enum ServerlessSubTab: String, Sendable, CaseIterable, Identifiable, Hashable {
+    case cloudRun
+    case functions
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .cloudRun: return "Cloud Run"
+        case .functions: return "Cloud Functions"
+        }
+    }
+}
+
+enum NetworkCISubTab: String, Sendable, CaseIterable, Identifiable, Hashable {
+    case vpc
+    case artifacts
+    case builds
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .vpc: return "VPC & Firewalls"
+        case .artifacts: return "Artifact Registry"
+        case .builds: return "Build & Scheduler"
         }
     }
 }
@@ -235,7 +285,10 @@ enum NavSection: String, Sendable, CaseIterable, Identifiable, Hashable {
 enum DataSubTab: String, Sendable, CaseIterable, Identifiable, Hashable {
     case bigQuery
     case cloudSQL
-    case secretManager
+    case firestore
+    case spanner
+    case redis
+    case pubSub
 
     var id: String { rawValue }
 
@@ -243,15 +296,39 @@ enum DataSubTab: String, Sendable, CaseIterable, Identifiable, Hashable {
         switch self {
         case .bigQuery: return "BigQuery"
         case .cloudSQL: return "Cloud SQL"
-        case .secretManager: return "Secret Manager"
+        case .firestore: return "Firestore"
+        case .spanner: return "Spanner"
+        case .redis: return "Memorystore"
+        case .pubSub: return "Pub/Sub"
+        }
+    }
+}
+
+enum SecuritySubTab: String, Sendable, CaseIterable, Identifiable, Hashable {
+    case iam
+    case apis
+    case secrets
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .iam: return "IAM Principals"
+        case .apis: return "Enabled APIs"
+        case .secrets: return "Secret Manager"
         }
     }
 }
 
 enum InspectorSelection: Sendable, Hashable {
     case vm(ComputeInstance)
+    case gke(GKECluster)
     case cloudRun(CloudRunService)
+    case function(CloudFunctionItem)
+    case firewall(FirewallRule)
+    case artifactRepo(ArtifactRepo)
     case gcsObject(GCSObject, previewText: String?)
     case sql(CloudSQLInstance)
+    case redis(RedisInstance)
     case secret(SecretItem)
 }

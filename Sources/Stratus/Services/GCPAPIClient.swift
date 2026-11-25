@@ -331,7 +331,7 @@ actor GCPAPIClient {
 
     // MARK: - Core Request Helper
 
-    private func rawRequest(
+    func rawRequest(
         urlString: String,
         method: String = "GET",
         body: Data? = nil,

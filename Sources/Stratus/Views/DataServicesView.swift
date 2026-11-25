@@ -15,7 +15,7 @@ struct DataServicesView: View {
     """
     @State private var hoveredDataset: String?
     @State private var hoveredSQL: String?
-    @State private var hoveredSecret: String?
+    @State private var pubSubDrafts: [String: String] = [:]
 
     var body: some View {
         @Bindable var state = appState
@@ -23,10 +23,10 @@ struct DataServicesView: View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(spacing: 14) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Data & Secrets")
+                    Text("Data & Messaging")
                         .font(T3.pageTitle())
                         .foregroundStyle(T3.textPrimary)
-                    Text("\(appState.selectedProject?.projectId ?? "") · BigQuery, Cloud SQL & Secret Manager")
+                    Text("\(appState.selectedProject?.projectId ?? "") · BigQuery, SQL, Firestore, Spanner, Redis & Pub/Sub")
                         .font(.system(size: 12))
                         .foregroundStyle(T3.textMuted)
                 }
@@ -52,8 +52,14 @@ struct DataServicesView: View {
                 bigQueryView
             case .cloudSQL:
                 cloudSQLView
-            case .secretManager:
-                secretManagerView
+            case .firestore:
+                firestoreView
+            case .spanner:
+                spannerView
+            case .redis:
+                redisView
+            case .pubSub:
+                pubSubView
             }
         }
         .padding(.horizontal, 36)
@@ -306,66 +312,234 @@ struct DataServicesView: View {
         }
     }
 
-    // MARK: - Secret Manager
+    // MARK: - Firestore, Spanner, Memorystore Redis, Pub/Sub
 
-    private var secretManagerView: some View {
+    private var firestoreView: some View {
         Group {
-            if appState.isLoadingSecrets && appState.secrets.isEmpty {
-                ProgressView("Loading secrets...")
+            if appState.isLoadingFirestore && appState.firestoreDatabases.isEmpty {
+                ProgressView("Loading Firestore databases...")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let err = appState.secretsError, appState.secrets.isEmpty {
-                EmptyStateView(icon: "key.fill", title: "Secret Manager unavailable", message: err, actionTitle: "Retry") {
-                    Task { await appState.refreshSecrets() }
+            } else if let err = appState.firestoreError, appState.firestoreDatabases.isEmpty {
+                EmptyStateView(icon: "flame", title: "Firestore unavailable", message: err, actionTitle: "Retry") {
+                    Task { await appState.refreshFirestore() }
                 }
-            } else if appState.secrets.isEmpty {
-                EmptyStateView(icon: "key", title: "No secrets stored", message: "Create secrets in Secret Manager to inspect versions and payloads.")
+            } else if appState.firestoreDatabases.isEmpty {
+                EmptyStateView(icon: "flame", title: "No Firestore databases", message: "No Firestore databases configured in this project.")
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 14) {
+                        ForEach(appState.firestoreDatabases) { db in
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: "flame.fill")
+                                        .font(.system(size: 13))
+                                        .foregroundStyle(T3.amber)
+                                    Text(db.name)
+                                        .font(T3.mono(14, weight: .semibold))
+                                        .foregroundStyle(T3.textPrimary)
+                                    TagPill(text: db.location, monospaced: true)
+                                    TagPill(text: db.type, monospaced: true)
+                                    TagPill(text: db.concurrencyMode, monospaced: true)
+                                }
+
+                                if !db.collections.isEmpty {
+                                    FlowWrapLayout(horizontalSpacing: 8, verticalSpacing: 8) {
+                                        ForEach(db.collections, id: \.self) { col in
+                                            TagPill(text: col, color: T3.mint, textColor: T3.textPrimary, monospaced: true)
+                                        }
+                                    }
+                                    .padding(.leading, 22)
+                                }
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                    }
+                    .padding(.bottom, 32)
+                }
+            }
+        }
+    }
+
+    private var spannerView: some View {
+        Group {
+            if appState.isLoadingSpanner && appState.spannerInstances.isEmpty {
+                ProgressView("Loading Cloud Spanner instances...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let err = appState.spannerError, appState.spannerInstances.isEmpty {
+                EmptyStateView(icon: "globe", title: "Cloud Spanner unavailable", message: err, actionTitle: "Retry") {
+                    Task { await appState.refreshSpanner() }
+                }
+            } else if appState.spannerInstances.isEmpty {
+                EmptyStateView(icon: "globe", title: "No Cloud Spanner instances", message: "No Cloud Spanner instances provisioned in this project.")
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(alignment: .leading, spacing: 12) {
+                        ForEach(appState.spannerInstances) { inst in
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack(spacing: 10) {
+                                    StatusDot(color: inst.isReady ? T3.mint : T3.amber, size: 6)
+                                    Text(inst.name)
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(T3.textPrimary)
+                                    TagPill(text: inst.config, color: T3.sky, monospaced: true)
+                                    TagPill(text: "\(inst.processingUnits) PU", monospaced: true)
+                                    Spacer()
+                                    Text(inst.state)
+                                        .font(T3.mono(11, weight: .semibold))
+                                        .foregroundStyle(inst.isReady ? T3.mint : T3.amber)
+                                }
+
+                                if !inst.databases.isEmpty {
+                                    FlowWrapLayout(horizontalSpacing: 8, verticalSpacing: 6) {
+                                        ForEach(inst.databases, id: \.self) { db in
+                                            TagPill(text: db, monospaced: true)
+                                        }
+                                    }
+                                    .padding(.leading, 18)
+                                }
+                            }
+                            .padding(14)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                    }
+                    .padding(.bottom, 32)
+                }
+            }
+        }
+    }
+
+    private var redisView: some View {
+        Group {
+            if appState.isLoadingRedis && appState.redisInstances.isEmpty {
+                ProgressView("Loading Memorystore Redis...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let err = appState.redisError, appState.redisInstances.isEmpty {
+                EmptyStateView(icon: "memorychip", title: "Memorystore unavailable", message: err, actionTitle: "Retry") {
+                    Task { await appState.refreshRedis() }
+                }
+            } else if appState.redisInstances.isEmpty {
+                EmptyStateView(icon: "memorychip", title: "No Redis instances", message: "No Memorystore Redis instances found in this project.")
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
                     LazyVStack(alignment: .leading, spacing: 6) {
-                        ForEach(appState.secrets) { secret in
-                            let isHovered = hoveredSecret == secret.id
-                            let isSelected: Bool = {
-                                if case .secret(let cur) = appState.inspector { return cur.id == secret.id }
-                                return false
-                            }()
-
-                            HStack(spacing: 12) {
-                                Image(systemName: "key.fill")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(T3.amber)
-                                    .frame(width: 18)
+                        ForEach(appState.redisInstances) { redis in
+                            HStack(spacing: 14) {
+                                StatusDot(color: redis.isReady ? T3.mint : T3.amber, size: 6, pulse: redis.isReady)
 
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(secret.shortName)
-                                        .font(T3.mono(13, weight: .semibold))
-                                        .foregroundStyle(T3.textPrimary)
-
                                     HStack(spacing: 8) {
-                                        TagPill(text: secret.replicationPolicy)
-                                        ForEach(secret.labels.keys.sorted(), id: \.self) { k in
-                                            TagPill(text: "\(k):\(secret.labels[k] ?? "")", monospaced: true)
-                                        }
+                                        Text(redis.name)
+                                            .font(.system(size: 13.5, weight: .semibold))
+                                            .foregroundStyle(T3.textPrimary)
+                                        TagPill(text: redis.redisVersion, color: T3.coral, monospaced: true)
+                                        TagPill(text: "\(redis.memorySizeGb) GB", monospaced: true)
+                                        TagPill(text: redis.tier, monospaced: true)
                                     }
+                                    Text("\(redis.host):\(redis.port) · \(redis.location)")
+                                        .font(T3.mono(11))
+                                        .foregroundStyle(T3.sky)
                                 }
 
                                 Spacer()
 
-                                if let created = secret.createTime {
-                                    Text(Formatters.relativeDate(created))
-                                        .font(T3.mono(11))
-                                        .foregroundStyle(T3.textTertiary)
+                                ActionPillButton(title: "Copy Host", systemImage: "doc.on.doc", tint: T3.textSecondary) {
+                                    appState.copyToClipboard("\(redis.host):\(redis.port)", label: "Redis endpoint")
                                 }
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 10)
-                            .background(
-                                isSelected ? T3.surfaceActive : (isHovered ? T3.surfaceHover : Color.clear),
-                                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            )
+                            .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                             .contentShape(Rectangle())
-                            .onHover { hoveredSecret = $0 ? secret.id : nil }
                             .onTapGesture {
-                                Task { await appState.inspectSecret(secret) }
+                                appState.inspector = .redis(redis)
+                            }
+                        }
+                    }
+                    .padding(.bottom, 32)
+                }
+            }
+        }
+    }
+
+    private var pubSubView: some View {
+        Group {
+            if appState.isLoadingPubSub && appState.pubSubTopics.isEmpty {
+                ProgressView("Loading Pub/Sub topics & subscriptions...")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if let err = appState.pubSubError, appState.pubSubTopics.isEmpty {
+                EmptyStateView(icon: "arrow.triangle.branch", title: "Pub/Sub unavailable", message: err, actionTitle: "Retry") {
+                    Task { await appState.refreshPubSub() }
+                }
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 26) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("TOPICS (\(appState.pubSubTopics.count))")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .tracking(0.8)
+                                .foregroundStyle(T3.textTertiary)
+
+                            ForEach(appState.pubSubTopics) { topic in
+                                let binding = Binding<String>(
+                                    get: { pubSubDrafts[topic.id] ?? "" },
+                                    set: { pubSubDrafts[topic.id] = $0 }
+                                )
+                                HStack(spacing: 10) {
+                                    Image(systemName: "arrow.triangle.branch")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(T3.mint)
+                                    Text(topic.name)
+                                        .font(T3.mono(13, weight: .semibold))
+                                        .foregroundStyle(T3.textPrimary)
+                                    Spacer()
+                                    BorderlessSearchField(text: binding, placeholder: "Publish JSON/text message...", width: 250)
+                                    ActionPillButton(title: "Publish", systemImage: "paperplane.fill", tint: T3.mint) {
+                                        let payload = pubSubDrafts[topic.id] ?? ""
+                                        pubSubDrafts[topic.id] = ""
+                                        Task { await appState.publishPubSubMessage(topic: topic, payload: payload) }
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 9)
+                                .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("SUBSCRIPTIONS (\(appState.pubSubSubscriptions.count))")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .tracking(0.8)
+                                .foregroundStyle(T3.textTertiary)
+
+                            ForEach(appState.pubSubSubscriptions) { sub in
+                                HStack(spacing: 12) {
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        HStack(spacing: 8) {
+                                            Text(sub.name)
+                                                .font(T3.mono(12.5, weight: .semibold))
+                                                .foregroundStyle(T3.textPrimary)
+                                            TagPill(text: "topic: \(sub.topicName)", color: T3.indigo, monospaced: true)
+                                            TagPill(text: "ack \(sub.ackDeadlineSeconds)s", monospaced: true)
+                                        }
+                                        if let endpoint = sub.pushEndpoint, !endpoint.isEmpty {
+                                            Text("push → \(endpoint)")
+                                                .font(T3.mono(11))
+                                                .foregroundStyle(T3.sky)
+                                                .lineLimit(1)
+                                        } else {
+                                            Text("pull subscription")
+                                                .font(T3.mono(11))
+                                                .foregroundStyle(T3.textTertiary)
+                                        }
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 9)
+                                .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
                             }
                         }
                     }

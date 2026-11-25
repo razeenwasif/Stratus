@@ -94,12 +94,16 @@ struct RootView: View {
             OverviewView()
         case .compute:
             ComputeView()
-        case .cloudRun:
+        case .serverless:
             CloudRunView()
+        case .networkAndCI:
+            NetworkAndCIView()
         case .storage:
             StorageView()
         case .dataServices:
             DataServicesView()
+        case .monitoring:
+            MonitoringView()
         case .logging:
             LoggingView()
         case .iamAndApis:

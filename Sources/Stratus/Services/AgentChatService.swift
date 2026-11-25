@@ -141,12 +141,22 @@ final class AgentChatStore {
         switch appState.inspector {
         case .vm(let vm):
             inspectorSummary = "Compute VM '\(vm.name)' (\(vm.zone), \(vm.status), \(vm.machineTypeShort))"
+        case .gke(let cluster):
+            inspectorSummary = "GKE cluster '\(cluster.name)' (\(cluster.location), v\(cluster.masterVersion), \(cluster.nodeCount) nodes)"
         case .cloudRun(let svc):
             inspectorSummary = "Cloud Run service '\(svc.name)' (\(svc.region), \(svc.uri))"
+        case .function(let fn):
+            inspectorSummary = "Cloud Function '\(fn.name)' (\(fn.region), \(fn.runtime), \(fn.triggerType))"
+        case .firewall(let rule):
+            inspectorSummary = "Firewall rule '\(rule.name)' (\(rule.action) \(rule.direction) \(rule.protocolsAndPorts))"
+        case .artifactRepo(let repo):
+            inspectorSummary = "Artifact repo '\(repo.name)' (\(repo.format), \(repo.location))"
         case .gcsObject(let obj, _):
             inspectorSummary = "GCS object 'gs://\(obj.bucket)/\(obj.name)'"
         case .sql(let sql):
             inspectorSummary = "Cloud SQL '\(sql.name)' (\(sql.databaseVersion), \(sql.state))"
+        case .redis(let redis):
+            inspectorSummary = "Memorystore Redis '\(redis.name)' (\(redis.host):\(redis.port), \(redis.memorySizeGb) GB)"
         case .secret(let sec):
             inspectorSummary = "Secret '\(sec.shortName)'"
         case nil:

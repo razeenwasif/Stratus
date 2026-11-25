@@ -33,12 +33,22 @@ struct InspectorDrawerView: View {
                     switch selection {
                     case .vm(let vm):
                         vmInspector(vm)
+                    case .gke(let cluster):
+                        gkeInspector(cluster)
                     case .cloudRun(let svc):
                         cloudRunInspector(svc)
+                    case .function(let fn):
+                        functionInspector(fn)
+                    case .firewall(let rule):
+                        firewallInspector(rule)
+                    case .artifactRepo(let repo):
+                        artifactRepoInspector(repo)
                     case .gcsObject(let obj, let preview):
                         gcsObjectInspector(obj, previewText: preview)
                     case .sql(let sql):
                         sqlInspector(sql)
+                    case .redis(let redis):
+                        redisInspector(redis)
                     case .secret(let secret):
                         secretInspector(secret)
                     }
@@ -54,9 +64,14 @@ struct InspectorDrawerView: View {
     private var headerTitle: String {
         switch selection {
         case .vm: return "VIRTUAL MACHINE"
+        case .gke: return "GKE CLUSTER"
         case .cloudRun: return "CLOUD RUN SERVICE"
+        case .function: return "CLOUD FUNCTION"
+        case .firewall: return "FIREWALL RULE"
+        case .artifactRepo: return "ARTIFACT REPOSITORY"
         case .gcsObject: return "STORAGE OBJECT"
         case .sql: return "CLOUD SQL INSTANCE"
+        case .redis: return "MEMORYSTORE REDIS"
         case .secret: return "SECRET MANAGER"
         }
     }
@@ -360,6 +375,228 @@ struct InspectorDrawerView: View {
                     .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7))
                 }
             }
+        }
+    }
+
+    private func gkeInspector(_ cluster: GKECluster) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    StatusDot(color: cluster.isRunning ? T3.mint : T3.amber, size: 6)
+                    Text(cluster.name)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(T3.textPrimary)
+                }
+                Text("Kubernetes v\(cluster.masterVersion)")
+                    .font(T3.mono(11.5))
+                    .foregroundStyle(T3.indigo)
+            }
+
+            ActionPillButton(title: "Copy kubectl auth", systemImage: "terminal", tint: T3.sky) {
+                let pid = appState.selectedProject?.projectId ?? ""
+                appState.copyToClipboard(cluster.getCredentialsCommand(projectId: pid), label: "kubectl auth command")
+            }
+
+            keyValueBlock([
+                ("Location", cluster.location),
+                ("Status", cluster.status),
+                ("Total Nodes", "\(cluster.nodeCount)"),
+                ("Endpoint", cluster.endpoint.isEmpty ? "Private" : cluster.endpoint),
+                ("Network", cluster.network)
+            ])
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("NODE POOLS")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(T3.textTertiary)
+                ForEach(cluster.nodePools) { pool in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(pool.name)
+                                .font(T3.mono(12, weight: .medium))
+                                .foregroundStyle(T3.textPrimary)
+                            Text(pool.machineType)
+                                .font(T3.mono(10.5))
+                                .foregroundStyle(T3.textTertiary)
+                        }
+                        Spacer()
+                        Text("\(pool.nodeCount) nodes")
+                            .font(T3.mono(11.5))
+                            .foregroundStyle(T3.textSecondary)
+                    }
+                    .padding(8)
+                    .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7))
+                }
+            }
+        }
+    }
+
+    private func functionInspector(_ fn: CloudFunctionItem) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    StatusDot(color: fn.isActive ? T3.mint : T3.amber, size: 6)
+                    Text(fn.name)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(T3.textPrimary)
+                }
+                Text(fn.runtime)
+                    .font(T3.mono(11.5))
+                    .foregroundStyle(T3.coral)
+            }
+
+            if !fn.uri.isEmpty {
+                ActionPillButton(title: "Open Endpoint", systemImage: "arrow.up.right", tint: T3.sky) {
+                    if let url = URL(string: fn.uri) { NSWorkspace.shared.open(url) }
+                }
+            }
+
+            keyValueBlock([
+                ("Region", fn.region),
+                ("State", fn.state),
+                ("Memory", fn.memory),
+                ("Trigger", fn.triggerType),
+                ("Updated", fn.updated.map { Formatters.relativeDate($0) } ?? "—")
+            ])
+        }
+    }
+
+    private func firewallInspector(_ rule: FirewallRule) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    StatusDot(color: rule.disabled ? T3.slate : (rule.action == "ALLOW" ? T3.mint : T3.rose), size: 6)
+                    Text(rule.name)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(T3.textPrimary)
+                }
+                Text("\(rule.action) · \(rule.direction) · Priority \(rule.priority)")
+                    .font(T3.mono(11.5))
+                    .foregroundStyle(rule.action == "ALLOW" ? T3.mint : T3.rose)
+            }
+
+            keyValueBlock([
+                ("Network", rule.network),
+                ("Protocols / Ports", rule.protocolsAndPorts),
+                ("Disabled", rule.disabled ? "Yes" : "No")
+            ])
+
+            if !rule.sourceRanges.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("SOURCE RANGES")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(T3.textTertiary)
+                    FlowWrapLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                        ForEach(rule.sourceRanges, id: \.self) { range in
+                            TagPill(text: range, monospaced: true)
+                        }
+                    }
+                }
+            }
+
+            if !rule.targetTags.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("TARGET TAGS")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(T3.textTertiary)
+                    FlowWrapLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+                        ForEach(rule.targetTags, id: \.self) { tag in
+                            TagPill(text: tag, monospaced: true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func artifactRepoInspector(_ repo: ArtifactRepo) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(repo.name)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(T3.textPrimary)
+                Text("\(repo.format) · \(repo.location)")
+                    .font(T3.mono(11.5))
+                    .foregroundStyle(T3.sky)
+            }
+
+            keyValueBlock([
+                ("Location", repo.location),
+                ("Format", repo.format),
+                ("Size", repo.sizeBytes > 0 ? Formatters.byteCount(repo.sizeBytes) : "—")
+            ])
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("IMAGES")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(T3.textTertiary)
+                    Spacer()
+                    if appState.isLoadingArtifactImages {
+                        ProgressView().controlSize(.small).scaleEffect(0.65)
+                    }
+                }
+
+                ForEach(appState.artifactImages) { img in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(img.name)
+                                .font(T3.mono(12, weight: .semibold))
+                                .foregroundStyle(T3.textPrimary)
+                            Spacer()
+                            Button {
+                                appState.copyToClipboard("docker pull \(img.uri)", label: "docker pull command")
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(T3.sky)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        HStack(spacing: 6) {
+                            ForEach(img.tags.prefix(3), id: \.self) { t in
+                                TagPill(text: t, monospaced: true)
+                            }
+                            if img.sizeBytes > 0 {
+                                Text(Formatters.byteCount(img.sizeBytes))
+                                    .font(T3.mono(10))
+                                    .foregroundStyle(T3.textTertiary)
+                            }
+                        }
+                    }
+                    .padding(8)
+                    .background(T3.surfaceSubtle, in: RoundedRectangle(cornerRadius: 7))
+                }
+            }
+        }
+    }
+
+    private func redisInspector(_ redis: RedisInstance) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    StatusDot(color: redis.isReady ? T3.mint : T3.amber, size: 6)
+                    Text(redis.name)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(T3.textPrimary)
+                }
+                Text(redis.redisVersion)
+                    .font(T3.mono(11.5))
+                    .foregroundStyle(T3.coral)
+            }
+
+            ActionPillButton(title: "Copy Endpoint", systemImage: "doc.on.doc", tint: T3.sky) {
+                appState.copyToClipboard("\(redis.host):\(redis.port)", label: "Redis endpoint")
+            }
+
+            keyValueBlock([
+                ("Location", redis.location),
+                ("Tier", redis.tier),
+                ("Memory", "\(redis.memorySizeGb) GB"),
+                ("Host", redis.host),
+                ("Port", "\(redis.port)"),
+                ("State", redis.state)
+            ])
         }
     }
 

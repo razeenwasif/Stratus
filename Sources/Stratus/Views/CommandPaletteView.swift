@@ -74,9 +74,27 @@ struct CommandPaletteView: View {
                 subtitle: "\(svc.region) · \(svc.uri)",
                 badge: "Cloud Run"
             ) {
-                appState.navigate(to: .cloudRun)
+                appState.selectedServerlessTab = .cloudRun
+                appState.navigate(to: .serverless)
                 appState.showCommandPalette = false
                 Task { await appState.inspectCloudRunService(svc) }
+            })
+        }
+
+        // GKE Clusters
+        for cluster in appState.gkeClusters {
+            list.append(PaletteEntry(
+                id: "gke-\(cluster.id)",
+                icon: "cube.transparent",
+                tint: T3.indigo,
+                title: cluster.name,
+                subtitle: "\(cluster.location) · v\(cluster.masterVersion) · \(cluster.nodeCount) nodes",
+                badge: "GKE"
+            ) {
+                appState.selectedComputeTab = .gke
+                appState.navigate(to: .compute)
+                appState.inspector = .gke(cluster)
+                appState.showCommandPalette = false
             })
         }
 

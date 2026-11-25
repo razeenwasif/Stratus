@@ -120,6 +120,37 @@ enum StratusCLI {
                 default:
                     throw AgentBridgeError.invalidArgument("Unknown secrets subcommand: \(sub)")
                 }
+            case "gke":
+                output = try await bridge.listGKE(projectId: projectId, demo: demo)
+            case "functions":
+                output = try await bridge.listFunctions(projectId: projectId, demo: demo)
+            case "network":
+                output = try await bridge.listNetwork(projectId: projectId, demo: demo)
+            case "artifacts":
+                output = try await bridge.listArtifacts(projectId: projectId, repoFullName: rest.first, demo: demo)
+            case "builds":
+                output = try await bridge.listBuilds(projectId: projectId, demo: demo)
+            case "scheduler":
+                if rest.first == "run" {
+                    guard rest.count >= 2 else { throw AgentBridgeError.missingArgument("scheduler run <jobFullName>") }
+                    output = try await bridge.scheduler(projectId: projectId, runJobFullName: rest[1], demo: demo)
+                } else {
+                    output = try await bridge.scheduler(projectId: projectId, demo: demo)
+                }
+            case "pubsub":
+                if rest.first == "publish" {
+                    guard rest.count >= 3 else { throw AgentBridgeError.missingArgument("pubsub publish <topic> <message>") }
+                    output = try await bridge.pubsub(projectId: projectId, publishTopic: rest[1], message: rest.dropFirst(2).joined(separator: " "), demo: demo)
+                } else {
+                    output = try await bridge.pubsub(projectId: projectId, demo: demo)
+                }
+            case "db":
+                output = try await bridge.databases(projectId: projectId, kind: rest.first ?? "all", demo: demo)
+            case "metrics":
+                var mArgs = rest
+                let hours = extractOption("--hours", from: &mArgs).flatMap(Int.init) ?? 24
+                let kind = mArgs.first ?? "computeCPU"
+                output = try await bridge.monitoring(projectId: projectId, metricRaw: kind, hours: hours, demo: demo)
             case "open":
                 let section = rest.first
                 output = try await bridge.openUI(section: section, projectId: projectId)

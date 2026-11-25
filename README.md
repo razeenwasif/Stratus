@@ -33,14 +33,16 @@ Google Cloud's web console is dense, nested, and slow to navigate. **Stratus** s
 
 | Section | Capabilities |
 | :--- | :--- |
-| **Overview** | Hero total spend KPI, service cost breakdown, interactive 30-day `.monotone` spline area chart with hover crosshair, `Totals` metric strip, segmented category/service bars, and clickable `Top resources` grid. |
-| **Compute Engine** | Aggregated VM inventory across zones, Running/Stopped filters, internal & external IPs, inline **Start / Stop / Reset**, and one-click `gcloud compute ssh` copy. |
-| **Cloud Run** | Service list with readiness indicators, clickable `.run.app` URLs, inline traffic split bars, scaling/resource specs, and full revision history drawer. |
-| **Cloud Storage** | Borderless bucket & folder browser with clickable breadcrumbs, inline text/JSON/YAML preview, **Upload** (`NSOpenPanel`), **Download** (`NSSavePanel`), and **Delete**. |
-| **Data & Secrets** | **BigQuery** dataset/table explorer + SQL query runner; **Cloud SQL** instance inventory & restart; **Secret Manager** version browser with masked-by-default payload reveal. |
-| **Cloud Logging** | Monospace log stream with severity pills (`ERR`, `WRN`, `INF`, `DBG`), Cloud Logging filter queries, and expandable `jsonPayload` inspection. |
-| **IAM & APIs** | Role-to-principal policy viewer (`roles/*`) and Service Usage API search with **Enable / Disable** controls. |
-| **Command Palette (`⌘K`)** | Fuzzy jump across projects, VMs, Cloud Run services, GCS buckets, sections, and connection settings. |
+| **Overview** | Hero total spend KPI (exact invoice spend via optional BigQuery Billing Export or API resource estimate), service breakdown, interactive 30-day `.monotone` spline area chart, `Totals` strip, and `Top resources`. |
+| **Compute & GKE** | Compute Engine VMs (Running/Stopped filters, IPs, **Start / Stop / Reset**, SSH copy) + **GKE Kubernetes** clusters, node pools & `kubectl` credential copy. |
+| **Serverless** | **Cloud Run** services, traffic split bars & revision history + **Cloud Functions v2** runtimes, triggers & endpoints. |
+| **Network & CI** | **VPC & Firewall Rules** (ALLOW/DENY, protocols/ports, source ranges), **Artifact Registry** repos & Docker image pull commands, **Cloud Build** history & **Cloud Scheduler** jobs (**Run Now**). |
+| **Cloud Storage** | Borderless bucket & folder browser with breadcrumbs, inline text/JSON/YAML preview, **Upload**, **Download**, and **Delete**. |
+| **Data & Messaging** | **BigQuery** SQL workspace, **Cloud SQL** instances & restart, **Firestore** databases & root collections, **Cloud Spanner**, **Memorystore (Redis)**, and **Pub/Sub** topics/subscriptions with inline **Publish**. |
+| **Monitoring** | Live **Cloud Monitoring** CPU, Memory, and Cloud Run request rate time-series spline charts (`1h`, `6h`, `24h`). |
+| **Cloud Logging** | Monospace log stream with severity pills (`ERR`, `WRN`, `INF`, `DBG`) and expandable `jsonPayload` inspection. |
+| **Security & IAM** | **IAM Principals**, **Enabled APIs** (enable/disable), and **Secret Manager** version inspection with masked-by-default payload reveal. |
+| **Agent Drawer (`⌘J`)** | Built-in **Fairy** & **Antigravity (`agy`)** chat drawer with live project/resource context, plus `⌘K` Command Palette. |
 
 ---
 

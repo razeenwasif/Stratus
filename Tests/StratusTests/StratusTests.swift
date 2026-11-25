@@ -245,4 +245,70 @@ struct StratusTests {
         #expect(ctx.contains("prod-platform-core"))
         #expect(ctx.contains("stratus_*"))
     }
+
+    @Test("Exact invoice billing parses BigQuery Billing Export rows")
+    func billingExportParsing() {
+        let bqResult = BQQueryResult(
+            columns: ["usage_date", "service_name", "net_cost"],
+            rows: [
+                ["2026-11-23", "Compute Engine", "42.50"],
+                ["2026-11-23", "Cloud Run", "12.25"],
+                ["2026-11-24", "Compute Engine", "45.00"]
+            ],
+            totalBytesProcessed: 2048,
+            durationMs: 120,
+            jobComplete: true
+        )
+        let overview = CostEstimator.buildFromBillingExport(
+            projectId: "prod-platform-core",
+            table: "billing.gcp_billing_export_v1",
+            queryResult: bqResult,
+            instances: [],
+            cloudRun: [],
+            buckets: [],
+            sqlInstances: []
+        )
+        #expect(overview != nil)
+        #expect(overview?.isEstimate == false)
+        #expect(abs((overview?.totalSpend ?? 0) - 99.75) < 0.01)
+        #expect(overview?.serviceSpends.first?.name == "Compute Engine")
+    }
+
+    @Test("Extended GCP REST API JSON decoders parse GKE, Functions, Firewalls, Artifacts, Builds, Scheduler, Redis, and Monitoring")
+    func extendedDecoders() throws {
+        let gkeJSON = #"{"clusters":[{"name":"prod-k8s","location":"us-central1","status":"RUNNING","currentMasterVersion":"1.30.5","currentNodeCount":4,"nodePools":[{"name":"pool-1","initialNodeCount":4,"config":{"machineType":"e2-standard-4"}}]}]}"#
+        let clusters = try GCPParser.decodeGKEClusters(from: Data(gkeJSON.utf8))
+        #expect(clusters.count == 1)
+        #expect(clusters[0].nodeCount == 4)
+
+        let fnJSON = #"{"functions":[{"name":"projects/p/locations/us-central1/functions/hook","state":"ACTIVE","buildConfig":{"runtime":"python312"},"serviceConfig":{"uri":"https://fn.run.app","availableMemory":"256M"}}]}"#
+        let fns = try GCPParser.decodeCloudFunctions(from: Data(fnJSON.utf8))
+        #expect(fns[0].name == "hook")
+        #expect(fns[0].runtime == "python312")
+
+        let fwJSON = #"{"items":[{"name":"allow-443","network":"global/networks/prod-vpc","direction":"INGRESS","priority":1000,"allowed":[{"IPProtocol":"tcp","ports":["443"]}],"sourceRanges":["0.0.0.0/0"]}]}"#
+        let rules = try GCPParser.decodeFirewallRules(from: Data(fwJSON.utf8))
+        #expect(rules[0].action == "ALLOW")
+        #expect(rules[0].protocolsAndPorts == "tcp:443")
+
+        let monJSON = #"{"timeSeries":[{"resource":{"labels":{"instance_name":"api-01"}},"points":[{"interval":{"endTime":"2026-11-25T00:00:00Z"},"value":{"doubleValue":0.42}}]}]}"#
+        let pts = try GCPParser.decodeMonitoringTimeSeries(from: Data(monJSON.utf8), metric: .computeCPU)
+        #expect(pts.count == 1)
+        #expect(pts[0].seriesName == "api-01")
+        #expect(abs(pts[0].value - 42.0) < 0.01)
+    }
+
+    @Test("Extended MCP tools respond cleanly in demo mode")
+    @MainActor
+    func extendedMCPTools() async {
+        let server = MCPServer()
+        let gkeReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"stratus_list_gke","arguments":{"demo":true}}}"#)
+        #expect(gkeReply?.contains("prod-gke-autopilot") == true)
+
+        let monReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"stratus_monitoring","arguments":{"metric":"computeCPU","demo":true}}}"#)
+        #expect(monReply?.contains("Compute CPU") == true)
+
+        let pubsubReply = await server.handleMessage(#"{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"stratus_pubsub","arguments":{"demo":true}}}"#)
+        #expect(pubsubReply?.contains("orders-events") == true)
+    }
 }
