@@ -56,6 +56,8 @@ Stratus communicates directly with official `*.googleapis.com` REST endpoints an
    Uses `ASWebAuthenticationSession` with SHA-256 PKCE (`com.stratus.gcp:/oauth2redirect`). Access & refresh tokens are stored strictly in your **macOS Keychain** (`com.stratus.gcp`).
 3. **Bearer Token / Demo Mode**
    Paste a temporary `ya29...` token into Keychain or toggle offline Demo Mode anytime from the bottom-left account pill.
+4. **Exact Invoice Billing (Optional)**
+   Configure a BigQuery Billing Export table (`project.dataset.gcp_billing_export_v1_...`) in Connection Settings to power the Overview dashboard with exact net billed daily spend instead of API estimates.
 
 ---
 
@@ -113,8 +115,16 @@ This configures:
 | `stratus_list_projects` | `stratus projects` | List accessible GCP projects |
 | `stratus_overview` | `stratus overview` | Cost & resource summary |
 | `stratus_list_vms` / `stratus_vm_action` | `stratus vm list\|start\|stop\|reset` | Inspect & control Compute VMs |
+| `stratus_list_gke` | `stratus gke` | List GKE clusters & node counts |
 | `stratus_list_cloud_run` | `stratus run list` | List Cloud Run services & URLs |
+| `stratus_list_functions` | `stratus functions` | List Cloud Functions v2 runtimes & triggers |
+| `stratus_list_network` | `stratus network` | List VPC networks & firewall rules |
+| `stratus_list_artifacts` | `stratus artifacts [repo]` | List Artifact Registry repos & Docker images |
+| `stratus_builds` / `stratus_scheduler` | `stratus builds` / `stratus scheduler` | View Cloud Build runs & trigger Scheduler jobs |
 | `stratus_list_buckets` / `stratus_list_objects` / `stratus_read_object` | `stratus storage buckets\|ls\|cat` | Browse & read GCS objects |
+| `stratus_pubsub` | `stratus pubsub [publish ...]` | List Pub/Sub topics/subscriptions & publish |
+| `stratus_databases` | `stratus db [firestore\|spanner\|redis]` | Inspect Firestore, Spanner & Memorystore Redis |
+| `stratus_monitoring` | `stratus metrics [kind] [--hours N]` | Query Cloud Monitoring CPU, Memory & request series |
 | `stratus_query_logs` | `stratus logs --filter "..."` | Query Cloud Logging |
 | `stratus_list_iam` / `stratus_list_apis` / `stratus_toggle_api` | `stratus iam` / `stratus apis ...` | Inspect IAM & toggle GCP APIs |
 | `stratus_bigquery` / `stratus_cloud_sql` / `stratus_secrets` | `stratus bq\|sql\|secrets ...` | Query BigQuery, Cloud SQL & Secret Manager |
@@ -129,7 +139,7 @@ This configures:
 | `⌘K` | Open Command Palette |
 | `⌘J` | Toggle In-App Agent Drawer (Fairy / Antigravity) |
 | `⌘R` | Refresh active view |
-| `⌘1` – `⌘7` | Jump to Overview, Compute, Cloud Run, Storage, Data & Secrets, Logs, or IAM & APIs |
+| `⌘1` – `⌘9` | Jump to Overview, Compute & GKE, Serverless, Network & CI, Storage, Data & Pub/Sub, Monitoring, Logs, or Security & IAM |
 | `⌘\` | Toggle sidebar |
 | `Esc` | Close Command Palette, Agent Drawer, or Inspector drawer |
 
@@ -139,19 +149,24 @@ This configures:
 
 ```text
 .
+├── .agents/skills/stratus/
+│   └── SKILL.md                  # Agent skill for Antigravity (agy) & Fairy
 ├── Assets/
 │   ├── AppIcon.icns
 │   └── AppIcon.png
 ├── Package.swift
 ├── scripts/
-│   ├── build-app.sh          # Compiles, bundles Stratus.app, and optionally installs to ~/Applications
-│   └── generate-icon.swift   # Renders 1024x1024 icon & compiles AppIcon.icns
+│   ├── build-app.sh              # Compiles, bundles Stratus.app, and optionally installs to ~/Applications
+│   ├── generate-icon.swift       # Renders 1024x1024 icon & compiles AppIcon.icns
+│   └── install-agent-integrations.sh  # Links `stratus` CLI and registers MCP + skills for agy & Fairy
 ├── Sources/Stratus/
-│   ├── Models/               # Sendable GCP resource & billing models
-│   ├── Services/             # AuthManager (PKCE + gcloud), KeychainStore, GCPAPIClient, CostEstimator, DemoDataProvider
-│   ├── State/                # @MainActor @Observable AppState
-│   ├── Theme/                # Pitch-black T3 tokens & zero-border SwiftUI components
-│   ├── Views/                # Overview, Compute, Cloud Run, Storage, Data & Secrets, Logging, IAM, Inspector, Palette
-│   └── StratusApp.swift
-└── Tests/StratusTests/       # Unit tests for PKCE, GCS encoding, REST JSON decoding & cost estimation
+│   ├── Agent/                    # AgentBridge, MCPServer (--mcp), and StratusCLI
+│   ├── Models/                   # Sendable GCP resource, billing, monitoring & extended models
+│   ├── Services/                 # AuthManager (PKCE + gcloud), KeychainStore, GCPAPIClient, CostEstimator, AgentChatService, DemoDataProvider
+│   ├── State/                    # @MainActor @Observable AppState
+│   ├── Theme/                    # Pitch-black T3 tokens & zero-border SwiftUI components
+│   ├── Views/                    # Overview, Compute & GKE, Serverless, Network & CI, Storage, Data & Pub/Sub, Monitoring, Logging, Security & IAM, Inspector, AgentDrawer, CommandPalette
+│   ├── StratusApp.swift
+│   └── StratusEntrypoint.swift   # Hybrid GUI / CLI / MCP stdio entrypoint
+└── Tests/StratusTests/           # Unit tests for PKCE, GCS encoding, REST JSON decoding, billing export, MCP & agent chat
 ```
